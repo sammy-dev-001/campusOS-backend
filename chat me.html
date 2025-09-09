@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Advanced Chat App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@4.6.2/dist/index.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: #eaeaea;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      transition: background 0.3s;
+    }
+
+    .dark-mode {
+      background: #121212;
+      color: #f1f1f1;
+    }
+
+    .container {
+      width: 380px;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      transition: background 0.3s;
+    }
+
+    .dark-mode .container {
+      background: #1f1f1f;
+    }
+
+    .login-screen,
+    .chat-screen {
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .active {
+      display: flex;
+    }
+
+    input[type="text"],
+    input[type="file"] {
+      margin-bottom: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      outline: none;
+    }
+
+    .login-screen button,
+    .chat-input button,
+    #toggleMode {
+      padding: 10px;
+      background-color: #4A90E2;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+
+    .chat-header {
+      background-color: #4A90E2;
+      color: white;
+      text-align: center;
+      padding: 15px;
+      font-weight: bold;
+      border-radius: 10px 10px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      background-color: #f9f9f9;
+    }
+
+    .dark-mode .chat-messages {
+      background: #2b2b2b;
+    }
+
+    .message {
+      max-width: 80%;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 12px;
+      position: relative;
+      animation: fadeIn 0.3s ease;
+      word-wrap: break-word;
+    }
+
+    .message.user {
+      background-color: #DCF8C6;
+      align-self: flex-end;
+    }
+
+    .message.ai {
+      background-color: #E5E5EA;
+      align-self: flex-start;
+    }
+
+    .dark-mode .message.user {
+      background-color: #2e7d32;
+      color: white;
+    }
+
+    .dark-mode .message.ai {
+      background-color: #424242;
+      color: white;
+    }
+
+    .timestamp {
+      font-size: 10px;
+      color: #777;
+      margin-top: 5px;
+      text-align: right;
+    }
+
+    .chat-input {
+      display: flex;
+      flex-wrap: wrap;
+      border-top: 1px solid #ddd;
+      padding: 10px;
+      gap: 5px;
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 20px;
+      border: 1px solid #ccc;
+      outline: none;
+    }
+
+    .chat-input button {
+      padding: 10px 12px;
+      border-radius: 20px;
+    }
+
+    #profilePic {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid white;
+      margin-left: 10px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" style="flex-direction: row; width: 500px; min-height: 500px;">
+    <!-- Sidebar for people list -->
+    <div id="sidebar" style="width: 120px; background: #f3f3f3; border-right: 1px solid #ddd; display: none; flex-direction: column; align-items: center; padding: 10px 0;">
+      <h4 style="margin: 0 0 10px 0; font-size: 15px;">People</h4>
+      <div id="peopleList" style="flex:1; width: 100%;"></div>
+    </div>
+    <div style="flex:1; display: flex; flex-direction: column;">
+      <!-- Login -->
+      <div class="login-screen active" id="loginScreen">
+        <h3>Welcome!</h3>
+        <input type="text" id="usernameInput" placeholder="Enter your name" />
+        <input type="file" id="profileInput" accept="image/*" />
+        <img id="profilePreview" src="" style="display:none; width:50px; height:50px; border-radius:50%; margin-bottom:10px;" />
+        <button onclick="login()">Enter Chat</button>
+        <button id="toggleMode">🌙 Toggle Dark Mode</button>
+      </div>
+
+      <!-- Chat -->
+      <div class="chat-screen" id="chatScreen">
+        <div class="chat-header">
+          <span id="chatHeader">Chat</span>
+          <img id="profilePic" src="" />
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input">
+          <input type="text" id="messageInput" placeholder="Type message..." />
+          <button id="emojiBtn">😊</button>
+          <button onclick="sendMessage()">Send</button>
+          <button onclick="startRecording()">🎤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let username = '';
+    let people = [];
+    let currentPerson = null;
+    let chatHistory = {}; // { personName: [ {sender, text, time} ] }
+    const emojiPicker = new EmojiButton();
+    const body = document.body;
+    let mediaRecorder;
+    let audioChunks = [];
+
+    // Handle profile picture preview
+    document.getElementById('profileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          document.getElementById('profilePreview').src = reader.result;
+          document.getElementById('profilePreview').style.display = 'block';
+          document.getElementById('profilePic').src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Login logic
+    function login() {
+      const nameInput = document.getElementById('usernameInput');
+      username = nameInput.value.trim();
+      if (!username) return alert('Please enter your name.');
+
+      document.getElementById('loginScreen').classList.remove('active');
+      document.getElementById('chatScreen').classList.add('active');
+      document.getElementById('sidebar').style.display = 'flex';
+
+      // Set profile picture in chat header
+      const profileInput = document.getElementById('profileInput');
+      const profilePic = document.getElementById('profilePic');
+      const preview = document.getElementById('profilePreview');
+      if (profileInput.files && profileInput.files[0]) {
+        profilePic.src = preview.src;
+        profilePic.style.display = 'block';
+      } else {
+        profilePic.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(username);
+        profilePic.style.display = 'block';
+      }
+
+      // Pre-populate people list with yourself and some default users
+      people = [
+        { name: username, avatar: profilePic.src, isSelf: true },
+        { name: 'Ada', avatar: 'https://ui-avatars.com/api/?name=Ada' },
+        { name: 'Ben', avatar: 'https://ui-avatars.com/api/?name=Ben' },
+        { name: 'Chidi', avatar: 'https://ui-avatars.com/api/?name=Chidi' },
+        { name: 'Zara', avatar: 'https://ui-avatars.com/api/?name=Zara' }
+      ];
+      // Initialize chat history for each
+      chatHistory = {};
+      people.forEach(p => { chatHistory[p.name] = []; });
+      currentPerson = username;
+      renderPeopleList();
+      selectPerson(username);
+    }
+
+    // Send message
+function sendMessage() {
+  const input = document.getElementById("messageInput");
+  let text = input.value.trim();
+  if (!text || !currentPerson) return;
+
+  // Add sender message (left)
+  addMessage("user", text);
+  input.value = "";
+
+  // Add two receiver replies (right)
+  if (currentPerson !== username) {
+    setTimeout(() => {
+      const replies = [
+        "😎 Cool!", "💡 Got it!", "🔥 Okay then!", "👍 Roger that!",
+        "😊 Sure!", "🙌 Noted!", "👌 Okay!", "🎉 Awesome!"
+      ];
+      // First reply
+      const reply1 = replies[Math.floor(Math.random() * replies.length)];
+      addMessage("ai", reply1);
+
+      // Second reply after a short delay
+      setTimeout(() => {
+        const reply2 = replies[Math.floor(Math.random() * replies.length)];
+        addMessage("ai", reply2);
+      }, 500);
+    }, 700);
+  }
+}
+
+    function addMessage(sender, text) {
+      if (!currentPerson) return;
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (!chatHistory[currentPerson]) chatHistory[currentPerson] = [];
+      chatHistory[currentPerson].push({ sender, text, time });
+      renderMessages();
+    }
+
+    function renderMessages() {
+      const chatBox = document.getElementById("chatMessages");
+      chatBox.innerHTML = "";
+      if (!currentPerson || !chatHistory[currentPerson]) return;
+      chatHistory[currentPerson].forEach(msg => {
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `message ${msg.sender}`;
+        msgDiv.innerHTML = `${msg.text}<div class="timestamp">${msg.time}</div>`;
+        chatBox.appendChild(msgDiv);
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    // People list logic
+    function renderPeopleList() {
+      const list = document.getElementById('peopleList');
+      list.innerHTML = '';
+      people.forEach(person => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.cursor = 'pointer';
+        div.style.padding = '6px 4px';
+        div.style.background = (currentPerson === person.name) ? '#e0eaff' : 'transparent';
+        div.onclick = () => selectPerson(person.name);
+        const img = document.createElement('img');
+        img.src = person.avatar;
+        img.style.width = '28px';
+        img.style.height = '28px';
+        img.style.borderRadius = '50%';
+        img.style.marginRight = '7px';
+        div.appendChild(img);
+        const span = document.createElement('span');
+        span.textContent = person.isSelf ? 'You' : person.name;
+        div.appendChild(span);
+        list.appendChild(div);
+      });
+    }
+
+    function selectPerson(name) {
+      currentPerson = name;
+      // Update chat header
+      const person = people.find(p => p.name === name);
+      document.getElementById('chatHeader').textContent = person.isSelf ? `Chat with yourself` : `Chat with ${person.name}`;
+      document.getElementById('profilePic').src = person.avatar;
+      renderPeopleList();
+      renderMessages();
+    }
+
+
+
+    // Emoji Picker
+    const trigger = document.querySelector('#emojiBtn');
+    emojiPicker.on('emoji', emoji => {
+      const input = document.getElementById("messageInput");
+      input.value += emoji;
+      input.focus();
+    });
+    trigger.addEventListener('click', () => emojiPicker.togglePicker(trigger));
+
+    // Enter key to send
+    document.getElementById("messageInput").addEventListener("keypress", e => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    // Dark Mode Toggle
+    document.getElementById('toggleMode').addEventListener('click', () => {
+      body.classList.toggle('dark-mode');
+    });
+
+    // Voice Recorder
+    async function startRecording() {
+      if (!navigator.mediaDevices) return alert("Voice not supported on your browser");
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks);
+        const audioURL = URL.createObjectURL(audioBlob);
+        const audio = `<audio controls src="${audioURL}"></audio>`;
+        addMessage("user", audio);
+      };
+
+      mediaRecorder.start();
+      setTimeout(() => mediaRecorder.stop(), 4000); // Records for 4s
+    }
+  </script>
+</body>
+</html>
