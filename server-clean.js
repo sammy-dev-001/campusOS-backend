@@ -47,7 +47,7 @@ async function initializeServer() {
 
     // Start the server
     const PORT = process.env.PORT || 5000;
-    const HOST = process.env.HOST || '10.135.91.216';
+    const HOST = process.env.HOST || '0.0.0.0';
 
     httpServer.listen(PORT, HOST, () => {
       console.log(`Server running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);

@@ -3155,7 +3155,7 @@ app.use((err, req, res, next) => {
 
 // Server configuration
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || '10.135.91.216';
+const HOST = '0.0.0.0'; // Always listen on all interfaces for Render
 
 // Start the application
 async function startServer() {
