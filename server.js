@@ -3153,9 +3153,9 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Server configuration
+// Server configuration - Always listen on all network interfaces
 const PORT = process.env.PORT || 5000;
-const HOST = '0.0.0.0'; // Always listen on all interfaces for Render
+const HOST = '0.0.0.0'; // This ensures the server listens on all available network interfaces
 
 // Start the application
 async function startServer() {
@@ -3163,9 +3163,9 @@ async function startServer() {
     await initializeServer();
     
     // Create HTTP server
-    const server = app.listen(PORT, HOST, () => {
-      console.log(`Server running on http://${HOST}:${PORT}`);
-      console.log(`API Documentation available at http://${HOST}:${PORT}/api-docs`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+      console.log(`API Documentation available at http://0.0.0.0:${PORT}/api-docs`);
     });
 
     // Handle server errors
