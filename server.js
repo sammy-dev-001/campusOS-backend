@@ -137,10 +137,10 @@ const httpServer = createServer(app);
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Enable CORS with specific configuration
+// Configure CORS for all routes
 const corsOptions = {
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Content-Length', 'X-Requested-With'],
   credentials: true,
   optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
@@ -153,14 +153,8 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Parse JSON bodies for all requests
-app.use(express.json());
-
-// Configure CORS
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 const io = new Server(httpServer, {
   cors: {
@@ -1308,6 +1302,26 @@ app.delete = function(path, ...handlers) {
   }
   return originalDelete.call(this, path, ...handlers);
 };
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to CampusOS Backend API',
+    status: 'operational',
+    documentation: 'https://github.com/sammy-dev-001/campusOS-backend',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Environment info endpoint
+app.get('/env', (req, res) => {
+  res.json({
+    node_env: process.env.NODE_ENV || 'development',
+    port: process.env.PORT || 5000,
+    platform: process.platform,
+    node_version: process.version
+  });
+});
 
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
