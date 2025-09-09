@@ -1313,6 +1313,20 @@ app.get('/', (req, res) => {
   });
 });
 
+// Debug route to list all users (temporary)
+app.get('/debug/users', async (req, res) => {
+  try {
+    const users = await dbAll('SELECT id, username, email, created_at FROM users');
+    res.json({
+      count: users.length,
+      users: users
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users', details: error.message });
+  }
+});
+
 // Environment info endpoint
 app.get('/env', (req, res) => {
   res.json({
