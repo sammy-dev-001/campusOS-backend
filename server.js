@@ -2124,6 +2124,7 @@ app.get('/posts/:postId/comments', async (req, res) => {
     }
 
     const comments = await dbAll(`
+      SELECT 
         c.*, 
         u.display_name, 
         u.profile_picture as profilePicture, 
@@ -2145,10 +2146,16 @@ app.get('/posts/:postId/comments', async (req, res) => {
     
     // Format comments to include user info and parent_comment_id
     const formattedComments = comments.map(comment => {
-      // Ensure profile picture URL is absolute
-      let profilePictureUrl = comment.profile_picture || comment.profilePicture;
-      if (profilePictureUrl && !profilePictureUrl.startsWith('http')) {
-        profilePictureUrl = `${req.protocol}://${req.get('host')}/uploads/${profilePictureUrl.split('/').pop()}`;
+      // Handle profile picture URL - only return the filename without path
+      let profilePictureUrl = null;
+      const profilePic = comment.profile_picture || comment.profilePicture;
+      if (profilePic) {
+        // Extract just the filename without path
+        const filename = profilePic.split('/').pop();
+        if (filename) {
+          // Return a relative URL that the frontend will use with its base URL
+          profilePictureUrl = `/uploads/${filename}`;
+        }
       }
       return {
         id: comment.id,
