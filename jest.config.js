@@ -1,0 +1,31 @@
+export default {
+  testEnvironment: 'node',
+  transform: {},
+  transformIgnorePatterns: ['/node_modules/'],
+  testMatch: ['**/__tests__/**/*.test.js'],
+  verbose: true,
+  setupFilesAfterEnv: ['./__tests__/setup.js'],
+  testPathIgnorePatterns: ['/node_modules/'],
+  moduleFileExtensions: ['js', 'json', 'node'],
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  collectCoverageFrom: [
+    '**/*.js',
+    '!**/node_modules/**',
+    '!**/coverage/**',
+    '!**/__tests__/**',
+    '!jest.config.js',
+    '!**/.eslintrc.js',
+    '!**/webpack.config.js',
+    '!**/babel.config.js',
+  ],
+  coverageReporters: ['text', 'lcov'],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+};

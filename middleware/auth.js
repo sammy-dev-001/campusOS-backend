@@ -1,32 +1,55 @@
 import jwt from 'jsonwebtoken';
-import { dbGet } from '../db.js';
+import User from '../models/User.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-export const authenticateToken = async (req, res, next) => {
+// Middleware to verify JWT token
+export const auth = async (req, res, next) => {
   try {
-    const authHeader = req.headers['authorization'];
+    const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+      return res.status(401).json({ message: 'No token, authorization denied' });
     }
 
+    // Verify token
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [decoded.userId]);
-
+    
+    // Get user from the token
+    const user = await User.findById(decoded.id).select('-password');
+    
     if (!user) {
-      return res.status(403).json({ error: 'User not found' });
+      return res.status(401).json({ message: 'User not found' });
     }
 
-    // Add user info to request object
+    // Add user to request object
     req.user = user;
     next();
   } catch (error) {
     console.error('Authentication error:', error);
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired' });
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
     }
-    return res.status(403).json({ error: 'Invalid token' });
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Middleware to check if user is admin
+export const admin = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user.isAdmin) {
+      return res.status(403).json({ message: 'Not authorized as admin' });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Admin middleware error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
