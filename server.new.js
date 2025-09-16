@@ -315,40 +315,70 @@ app.all('*', (req, res, next) => {
 // Global error handling middleware
 app.use(globalErrorHandler);
 
-// Graceful shutdown
-let isShuttingDown = false;
-const gracefulShutdown = async () => {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
+// Server state management
+const serverState = {
+  isShuttingDown: false,
+  activeConnections: new Set(),
   
-  console.log('Shutting down gracefully...');
+  // Track active connections
+  trackConnections(server) {
+    server.on('connection', (connection) => {
+      this.activeConnections.add(connection);
+      connection.on('close', () => {
+        this.activeConnections.delete(connection);
+      });
+    });
+  },
   
-  try {
-    // Close HTTP server
-    await new Promise((resolve) => httpServer.close(() => {
-      console.log('HTTP server closed');
-      resolve();
-    }));
+  // Close all active connections
+  closeConnections() {
+    console.log('Closing all active connections...');
+    this.activeConnections.forEach(connection => {
+      connection.destroy();
+      this.activeConnections.delete(connection);
+    });
+  },
+  
+  // Graceful shutdown handler
+  async gracefulShutdown() {
+    if (this.isShuttingDown) return;
+    this.isShuttingDown = true;
     
-    // Close MongoDB connection
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.close(false);
-      console.log('MongoDB connection closed');
+    console.log('Shutting down gracefully...');
+    
+    try {
+      // Close HTTP server
+      await new Promise((resolve) => httpServer.close(() => {
+        console.log('HTTP server closed');
+        resolve();
+      }));
+      
+      // Close MongoDB connection
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close(false);
+        console.log('MongoDB connection closed');
+      }
+      
+      // Close WebSocket connections
+      if (webSocketService) {
+        webSocketService.io.close();
+        console.log('WebSocket server closed');
+      }
+      
+      // Close any remaining connections
+      this.closeConnections();
+      
+      console.log('Shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during shutdown:', error);
+      process.exit(1);
     }
-    
-    // Close WebSocket connections
-    if (webSocketService) {
-      webSocketService.io.close();
-      console.log('WebSocket server closed');
-    }
-    
-    console.log('Shutdown complete');
-    process.exit(0);
-  } catch (error) {
-    console.error('Error during shutdown:', error);
-    process.exit(1);
   }
 };
+
+// Alias for backward compatibility
+const gracefulShutdown = serverState.gracefulShutdown.bind(serverState);
 
 // Start server
 const PORT = process.env.PORT || 5000;
@@ -389,7 +419,7 @@ const startServer = async () => {
     await connectDB();
     
     // Start HTTP server
-    httpServer.listen(PORT, HOST, () => {
+    const server = httpServer.listen(PORT, HOST, () => {
       console.log(`\n${'='.repeat(50)}`);
       console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
       console.log(`🌐 Server URL: http://${HOST}:${PORT}`);
@@ -401,7 +431,10 @@ const startServer = async () => {
     });
     
     // Handle server errors
-    httpServer.on('error', (error) => {
+    // Track active connections
+    serverState.trackConnections(server);
+    
+    server.on('error', (error) => {
       if (error.syscall !== 'listen') {
         throw error;
       }
