@@ -325,6 +325,16 @@ app.use(`${API_PREFIX}/tutors`, tutorRoutes);
 app.use(`${API_PREFIX}/timetables`, timetableRoutes);
 app.use(`${API_PREFIX}/polls`, pollRoutes);
 
+// Mount non-versioned API routes for backward compatibility
+app.use('/api/auth', authRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/tutors', tutorRoutes);
+app.use('/api/timetables', timetableRoutes);
+app.use('/api/polls', pollRoutes);
+
 // 404 handler for API routes
 app.all(`${API_PREFIX}/*`, (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
