@@ -169,9 +169,8 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-// Indexes
-userSchema.index({ username: 1 }, { unique: true });
-userSchema.index({ email: 1 }, { unique: true });
+// Indexes are already defined in the schema options (unique: true)
+// Removing duplicate index definitions to avoid warnings
 
 // Pre-save hook to set fullName and handle timestamps
 userSchema.pre('save', function(next) {

@@ -219,9 +219,8 @@ if (postSchema.path('hashtags')) keywordPaths.push('hashtags');
 postSchema.plugin(mongooseKeywords, { paths: keywordPaths });
 
 // Indexes
-postSchema.index({ author: 1 });
-postSchema.index({ createdAt: -1 });
-postSchema.index({ 'location.coordinates': '2dsphere' });
+// Note: author and location.coordinates indexes are already defined in the schema options
+// Only define compound or additional indexes that aren't covered by schema options
 postSchema.index({ 'mentions.user': 1 });
 postSchema.index({ hashtags: 1 });
 postSchema.index({ status: 1, scheduledAt: 1 });
