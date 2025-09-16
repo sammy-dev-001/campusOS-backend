@@ -380,8 +380,8 @@ process.on('unhandledRejection', (reason, promise) => {
   
   // In production, attempt graceful shutdown
   gracefulShutdown();
-  }
 });
+
 
 // Log uncaught exceptions
 process.on('uncaughtException', (error) => {
