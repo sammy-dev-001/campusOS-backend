@@ -210,7 +210,13 @@ const postSchema = new mongoose.Schema({
 // Add plugins
 postSchema.plugin(toJSON);
 postSchema.plugin(paginate);
-postSchema.plugin(mongooseKeywords, { paths: ['content', 'tags', 'hashtags', 'author.username'] });
+
+// Only include fields that exist in the schema
+const keywordPaths = ['content'];
+if (postSchema.path('tags')) keywordPaths.push('tags');
+if (postSchema.path('hashtags')) keywordPaths.push('hashtags');
+
+postSchema.plugin(mongooseKeywords, { paths: keywordPaths });
 
 // Indexes
 postSchema.index({ author: 1 });
