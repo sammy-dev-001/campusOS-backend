@@ -361,13 +361,25 @@ const gracefulShutdown = async () => {
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Log unhandled rejections
+// Log unhandled rejections with more details
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Consider whether to shut down or not based on the error
-  // For development, you might want to keep the server running
-  if (process.env.NODE_ENV === 'production') {
-    gracefulShutdown();
+  console.error('\n❌ UNHANDLED REJECTION! Shutting down...');
+  console.error('Reason:', reason);
+  console.error('Promise:', promise);
+  
+  // Log stack trace if available
+  if (reason instanceof Error) {
+    console.error('Stack:', reason.stack);
+  }
+  
+  // In development, log the error but don't shut down
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('⚠️  Server kept alive in development mode due to unhandled rejection');
+    return;
+  }
+  
+  // In production, attempt graceful shutdown
+  gracefulShutdown();
   }
 });
 
@@ -392,10 +404,21 @@ process.on('uncaughtException', (error) => {
 // Start the application
 const startServer = async () => {
   try {
-    // Connect to MongoDB
-    await connectDB();
+    console.log('🔍 Starting server initialization...');
     
-    // Start HTTP server
+    // Connect to MongoDB with better error handling
+    try {
+      console.log('🔗 Connecting to MongoDB...');
+      await connectDB();
+      console.log('✅ MongoDB connected successfully');
+    } catch (dbError) {
+      console.error('❌ MongoDB connection error:', dbError);
+      throw dbError; // Re-throw to be caught by outer try-catch
+    }
+    
+    // Start HTTP server with better error handling
+    console.log(`🌐 Starting HTTP server on ${HOST}:${PORT}...`);
+    
     httpServer.listen(PORT, HOST, () => {
       console.log(`\n${'='.repeat(50)}`);
       console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
@@ -405,6 +428,19 @@ const startServer = async () => {
       console.log(`☁️  Cloudinary: ${cloudinary.config().cloud_name ? 'connected' : 'not configured'}`);
       console.log(`📅 ${new Date().toLocaleString()}`);
       console.log(`${'='.repeat(50)}\n`);
+      
+      // Log all environment variables (excluding sensitive ones) for debugging
+      console.log('🛠️  Environment:');
+      Object.entries(process.env).forEach(([key, value]) => {
+        if (key.includes('SECRET') || key.includes('KEY') || key.includes('PASSWORD')) {
+          console.log(`   ${key}=[REDACTED]`);
+        } else if (key.startsWith('NODE_') || key.startsWith('npm_') || key === 'PATH' || key === 'HOME') {
+          // Skip common Node/npm env vars
+        } else {
+          console.log(`   ${key}=${value}`);
+        }
+      });
+      console.log('\n✅ Server started successfully!');
     });
     
     // Handle server errors
@@ -436,7 +472,36 @@ const startServer = async () => {
 
 // Only start the server if this file is run directly (not required/imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  startServer();
+  console.log('🚀 Starting server...');
+  startServer().catch(error => {
+    console.error('💥 Failed to start server:', error);
+    process.exit(1);
+  });
+  
+  // Handle SIGTERM and SIGINT for graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('\n🛑 SIGTERM received. Starting graceful shutdown...');
+    gracefulShutdown();
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('\n🛑 SIGINT received. Starting graceful shutdown...');
+    gracefulShutdown();
+  });
+  
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error('\n❌ UNCAUGHT EXCEPTION! Shutting down...');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('⚠️  Server kept alive in development mode due to uncaught exception');
+      return;
+    }
+    
+    gracefulShutdown();
+  });
 }
 
 export { app, httpServer, webSocketService };
