@@ -296,16 +296,19 @@ app.use('/api/tutors', tutorRoutes);
 app.use('/api/timetables', timetableRoutes);
 app.use('/api/polls', pollRoutes);
 
-// Serve static assets in production
-if (process.env.NODE_ENV === 'production') {
-  // Set static folder
-  app.use(express.static(path.join(__dirname, '../client/build')));
-  
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
+// API route for checking if the server is running
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'API is running',
+    timestamp: new Date().toISOString()
   });
-}
+});
+
+// Handle 404 for API routes
+app.use('/api/*', (req, res, next) => {
+  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+});
 
 // Handle 404 - Not Found
 app.all('*', (req, res, next) => {
