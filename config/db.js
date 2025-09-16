@@ -55,49 +55,117 @@ process.on('SIGTERM', () => {
   });
 });
 
-// Connect to MongoDB
+// MongoDB connection settings and state
+const mongoOptions = {
+  maxPoolSize: 10,
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 10000,
+  family: 4,
+  retryWrites: true,
+  w: 'majority',
+  // Enable retry for all operations
+  retryReads: true,
+};
+
+// Connection state tracking
+let isConnected = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const RECONNECT_INTERVAL = 5000; // 5 seconds
+
+// Configure MongoDB connection with auto-reconnect
+const configureMongoOptions = () => {
+  const isAtlas = process.env.MONGODB_URI?.includes('mongodb+srv://');
+  
+  return {
+    ...mongoOptions,
+    // Only set SSL options for Atlas connections
+    ...(isAtlas ? {
+      ssl: true,
+      tlsAllowInvalidCertificates: true,
+      tlsAllowInvalidHostnames: true
+    } : {})
+  };
+};
+
+// Handle MongoDB connection events
+const setupConnectionHandlers = (connection) => {
+  connection.on('connected', () => {
+    isConnected = true;
+    reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+    console.log(chalk.green('✅ MongoDB connected successfully'));
+  });
+
+  connection.on('error', (err) => {
+    console.error(chalk.red(`❌ MongoDB connection error: ${err.message}`));
+    isConnected = false;
+  });
+
+  connection.on('disconnected', () => {
+    console.log(chalk.yellow('ℹ️  MongoDB disconnected'));
+    isConnected = false;
+    attemptReconnect();
+  });
+
+  connection.on('reconnected', () => {
+    console.log(chalk.green('♻️  MongoDB reconnected'));
+    isConnected = true;
+  });
+};
+
+// Attempt to reconnect to MongoDB
+const attemptReconnect = async () => {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.error(chalk.red(`❌ Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached.`));
+    return;
+  }
+
+  reconnectAttempts++;
+  console.log(chalk.yellow(`⚠️  Attempting to reconnect to MongoDB (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`));
+
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, configureMongoOptions());
+  } catch (error) {
+    console.error(chalk.red(`❌ Reconnection attempt ${reconnectAttempts} failed: ${error.message}`));
+    // Schedule next reconnection attempt
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      setTimeout(attemptReconnect, RECONNECT_INTERVAL);
+    }
+  }
+};
+
+// Connect to MongoDB with auto-reconnect
 const connectDB = async () => {
   try {
     if (!process.env.MONGODB_URI) {
       throw new Error('MongoDB connection string is not defined. Please set MONGODB_URI environment variable.');
     }
 
-    const isAtlas = process.env.MONGODB_URI.includes('mongodb+srv://');
-    
-    const options = {
-      // Connection settings
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
-      family: 4,
-      
-      // Only set SSL options for Atlas connections
-      ...(isAtlas ? {
-        ssl: true,
-        tlsAllowInvalidCertificates: true,
-        tlsAllowInvalidHostnames: true
-      } : {})
-    };
-
     console.log(chalk.blue('🔌 Connecting to MongoDB...'));
-    await mongoose.connect(process.env.MONGODB_URI, options);
     
-    console.log(chalk.green(`✅ Connected to MongoDB: ${mongoose.connection.host}`));
+    // Configure connection options
+    const options = configureMongoOptions();
+    
+    // Set up event handlers
+    setupConnectionHandlers(mongoose.connection);
     
     // Enable Mongoose query logging in development
     if (process.env.NODE_ENV === 'development') {
       mongoose.set('debug', { shell: true });
     }
     
+    // Connect to MongoDB
+    await mongoose.connect(process.env.MONGODB_URI, options);
+    
     return mongoose.connection;
   } catch (error) {
-    console.error(chalk.red(`❌ MongoDB connection error: ${error.message}`));
+    console.error(chalk.red(`❌ Initial MongoDB connection failed: ${error.message}`));
     console.error('Connection URI:', process.env.MONGODB_URI ? 'Provided' : 'Not provided');
     if (error.code) console.error('Error code:', error.code);
     if (error.codeName) console.error('Code name:', error.codeName);
     
-    // If this is a connection error, retry after a delay
+    // Start reconnection attempts
     if (error.name === 'MongooseServerSelectionError' || error.name === 'MongoServerSelectionError') {
       console.log(chalk.yellow('Retrying connection in 5 seconds...'));
       await new Promise(resolve => setTimeout(resolve, 5000));

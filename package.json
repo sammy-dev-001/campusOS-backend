@@ -9,9 +9,18 @@
     "npm": ">=8.0.0"
   },
   "scripts": {
-    "start": "node server.new.js",
+    "start": "node start-server.js",
     "dev": "nodemon --watch . --ext js --exec node --experimental-specifier-resolution=node server.new.js",
-    "prod": "NODE_ENV=production node server.new.js",
+    "prod": "NODE_ENV=production node start-server.js",
+    "pm2:start": "npx pm2 start ecosystem.config.js",
+    "pm2:stop": "npx pm2 stop ecosystem.config.js",
+    "pm2:restart": "npx pm2 restart ecosystem.config.js",
+    "pm2:delete": "npx pm2 delete ecosystem.config.js",
+    "pm2:logs": "npx pm2 logs campusos-backend",
+    "pm2:monitor": "npx pm2 monit",
+    "pm2:status": "npx pm2 status",
+    "pm2:save": "npx pm2 save",
+    "pm2:startup": "npx pm2 startup",
     "test": "cross-env NODE_ENV=test mocha --require ./test/setup.js test/**/*.test.js --timeout 10000 --exit",
     "test:watch": "cross-env NODE_ENV=test mocha --require ./test/setup.js test/**/*.test.js --watch --timeout 10000",
     "test:unit": "cross-env NODE_ENV=test jest --detectOpenHandles --forceExit",
@@ -104,6 +113,7 @@
     "mocha": "^10.8.2",
     "mongodb-memory-server": "^10.2.1",
     "nodemon": "^3.0.3",
+    "pm2": "^6.0.11",
     "prettier": "^3.1.1",
     "supertest": "^6.3.4"
   },

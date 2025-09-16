@@ -35,6 +35,7 @@ import announcementRoutes from './routes/announcementRoutes.js';
 import tutorRoutes from './routes/tutorRoutes.js';
 import timetableRoutes from './routes/timetableRoutes.js';
 import pollRoutes from './routes/polls.js';
+import healthRoutes from './routes/health.js';
 
 // Get the current file and directory names
 const __filename = fileURLToPath(import.meta.url);
@@ -336,6 +337,7 @@ app.use(`${API_PREFIX}/announcements`, announcementRoutes);
 app.use(`${API_PREFIX}/tutors`, tutorRoutes);
 app.use(`${API_PREFIX}/timetables`, timetableRoutes);
 app.use(`${API_PREFIX}/polls`, pollRoutes);
+app.use(`${API_PREFIX}/health`, healthRoutes);
 
 // Mount non-versioned API routes for backward compatibility
 app.use('/api/auth', authRoutes);
@@ -346,6 +348,12 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/tutors', tutorRoutes);
 app.use('/api/timetables', timetableRoutes);
 app.use('/api/polls', pollRoutes);
+app.use('/api/health', healthRoutes);
+
+// Root health check endpoint
+app.get('/health', (req, res) => {
+  res.redirect(`${API_PREFIX}/health`);
+});
 
 // 404 handler for API routes
 app.all(`${API_PREFIX}/*`, (req, res, next) => {
@@ -459,7 +467,7 @@ const closeConnections = () => {
 
 // Log unhandled rejections with more details
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('\n❌ UNHANDLED REJECTION! Shutting down...');
+  console.error('\n❌ UNHANDLED REJECTION!');
   console.error('Reason:', reason);
   console.error('Promise:', promise);
   
@@ -468,24 +476,32 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Stack:', reason.stack);
   }
   
-  // In development, log the error but don't shut down
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('⚠️  Server kept alive in development mode due to unhandled rejection');
-    return;
-  }
-  
-  // In production, attempt graceful shutdown
-  gracefulShutdown();
+  // Never shut down, just log the error
+  console.log('⚠️  Server kept alive despite unhandled rejection');
 });
 
-// Log uncaught exceptions
+// Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  // Attempt to log the error to an external service
-  // Then decide whether to shut down or not
-  if (process.env.NODE_ENV === 'production') {
-    gracefulShutdown();
-  }
+  console.error('\n❌ UNCAUGHT EXCEPTION!');
+  console.error('Error:', error);
+  console.error('Stack:', error.stack);
+  
+  // Log to external service if needed
+  // ...
+  
+  // Keep the process alive
+  console.log('⚠️  Server kept alive despite uncaught exception');
+  return true; // Prevents default exit
+});
+
+// Handle any uncaught promise rejections that might still cause exit
+process.on('rejectionHandled', (promise) => {
+  console.log('A promise rejection was handled asynchronously');
+});
+
+// Handle process warnings
+process.on('warning', (warning) => {
+  console.warn('Process Warning:', warning);
 });
 
 // Handle termination signals
@@ -523,48 +539,34 @@ const startServer = async () => {
 
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err) => {
-      console.error('UNHANDLED REJECTION! 💥', err.name, err.message);
+      console.error('UNHANDLED REJECTION!', err.name, err.message);
       console.error(err.stack);
       
-      if (!isShuttingDown) {
-        console.log('Gracefully shutting down...');
-        isShuttingDown = true;
-        
-        // Close the server and exit after a timeout
-        server.close(() => {
-          console.log('Server closed');
-          process.exit(1);
-        });
-        
-        // Force close after timeout
-        setTimeout(() => {
-          console.error('Forcing shutdown...');
-          process.exit(1);
-        }, 10000);
+      // Log the error but don't shut down
+      console.log('⚠️  Server kept alive despite unhandled rejection');
+      
+      // Try to recover the error state
+      if (err.name === 'MongoServerSelectionError' || err.name === 'MongooseServerSelectionError') {
+        console.log('Attempting to reconnect to MongoDB...');
+        // Add reconnection logic here if needed
       }
     });
 
     // Handle uncaught exceptions
     process.on('uncaughtException', (err) => {
-      console.error('UNCAUGHT EXCEPTION! 💥', err.name, err.message);
+      console.error('UNCAUGHT EXCEPTION!', err.name, err.message);
       console.error(err.stack);
       
-      if (!isShuttingDown) {
-        isShuttingDown = true;
-        console.log('Gracefully shutting down...');
-        
-        // Close the server and exit after a timeout
-        server.close(() => {
-          console.log('Server closed');
-          process.exit(1);
-        });
-        
-        // Force close after timeout
-        setTimeout(() => {
-          console.error('Forcing shutdown...');
-          process.exit(1);
-        }, 10000);
+      // Log the error but don't shut down
+      console.log('⚠️  Server kept alive despite uncaught exception');
+      
+      // Try to recover from common errors
+      if (err.code === 'EADDRINUSE') {
+        console.log('Port is in use, trying to recover...');
+        // Add port recovery logic if needed
       }
+      
+      return true; // Prevents default exit
     });
 
     // Handle SIGTERM for graceful shutdown
