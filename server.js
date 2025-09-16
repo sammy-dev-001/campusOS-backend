@@ -80,11 +80,15 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+// Trust proxy for rate limiting behind load balancer
+app.set('trust proxy', 1); // Trust first proxy
+
 // Limit requests from same API
 const limiter = rateLimit({
   max: 1000, // 1000 requests per hour
   windowMs: 60 * 60 * 1000, // 1 hour
-  message: 'Too many requests from this IP, please try again in an hour!'
+  message: 'Too many requests from this IP, please try again in an hour!',
+  validate: { trustProxy: false } // Disable trust proxy validation for rate limiting
 });
 app.use('/api', limiter);
 

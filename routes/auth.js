@@ -6,14 +6,23 @@ import User from '../models/User.js';
 const router = express.Router();
 
 // Register a new user
-router.post('/register', async (req, res) => {
+const registerUser = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    let { username, email, password, loginUsername, displayName } = req.body;
+    
+    // Handle the frontend's signup format
+    if (loginUsername && displayName) {
+      username = loginUsername;
+      // Use displayName for the username or another field if needed
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ 
+        message: 'User already exists',
+        field: existingUser.email === email ? 'email' : 'username'
+      });
     }
 
     // Create new user
@@ -22,6 +31,7 @@ router.post('/register', async (req, res) => {
       username,
       email,
       password: hashedPassword,
+      displayName: displayName || username,
     });
 
     await user.save();
@@ -38,15 +48,20 @@ router.post('/register', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        displayName: user.displayName,
         profilePic: user.profilePic,
       },
       token,
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Error registering user' });
+    res.status(500).json({ message: 'Error registering user', error: error.message });
   }
-});
+};
+
+// Register routes for both /register and /signup
+router.post('/register', registerUser);
+router.post('/signup', registerUser);
 
 // User login
 router.post('/login', async (req, res) => {
