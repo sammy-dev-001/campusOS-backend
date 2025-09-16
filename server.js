@@ -160,25 +160,37 @@ const io = new Server(httpServer, {
 const webSocketService = new WebSocketService(io);
 app.set('webSocketService', webSocketService);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: process.env.NODE_ENV === 'production',
-  api_proxy: process.env.CLOUDINARY_PROXY,
-  cdn_subdomain: true,
-  secure_distribution: true,
-  cname: process.env.CLOUDINARY_CNAME,
-  private_cdn: !!process.env.CLOUDINARY_PRIVATE_CDN,
-  sign_url: !!process.env.CLOUDINARY_SIGN_URL,
-  ssl_detected: true
-});
+// Configure Cloudinary with enhanced error handling
+const configureCloudinary = () => {
+  try {
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      throw new Error('Missing required Cloudinary configuration');
+    }
 
-// Test Cloudinary connection
-cloudinary.api.ping()
-  .then(() => console.log('Connected to Cloudinary'))
-  .catch(err => console.error('Cloudinary connection error:', err));
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+      secure: true
+    });
+
+    // Test Cloudinary connection
+    cloudinary.api.ping({}, (error) => {
+      if (error) {
+        console.error('❌ Cloudinary connection test failed:', error.message);
+      } else {
+        console.log('✅ Cloudinary connected successfully');
+      }
+    });
+  } catch (error) {
+    console.error('❌ Failed to configure Cloudinary:', error.message);
+    // Don't crash the app if Cloudinary fails to configure
+    console.log('⚠️  Cloudinary will be disabled. File uploads will not work.');
+  }
+};
+
+// Initialize Cloudinary
+configureCloudinary();
 
 // Create storage engines for different types of uploads
 const createCloudinaryStorage = (folder, resourceType = 'auto') => {
@@ -418,9 +430,32 @@ const gracefulShutdown = async () => {
   }
 };
 
-// Start server
+// Start server with enhanced error handling
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// Track server state
+let isShuttingDown = false;
+const activeConnections = new Set();
+
+// Track active connections
+const trackConnections = (server) => {
+  server.on('connection', (connection) => {
+    activeConnections.add(connection);
+    connection.on('close', () => {
+      activeConnections.delete(connection);
+    });
+  });
+};
+
+// Close all active connections
+const closeConnections = () => {
+  console.log('Closing all active connections...');
+  activeConnections.forEach(connection => {
+    connection.destroy();
+    activeConnections.delete(connection);
+  });
+};
 
 // Log unhandled rejections with more details
 process.on('unhandledRejection', (reason, promise) => {
@@ -442,7 +477,6 @@ process.on('unhandledRejection', (reason, promise) => {
   // In production, attempt graceful shutdown
   gracefulShutdown();
 });
-
 
 // Log uncaught exceptions
 process.on('uncaughtException', (error) => {
@@ -467,67 +501,105 @@ const startServer = async () => {
   try {
     console.log('🔍 Starting server initialization...');
     
-    // Connect to MongoDB with better error handling
+    // Connect to MongoDB with retry logic
     try {
       console.log('🔗 Connecting to MongoDB...');
       await connectDB();
       console.log('✅ MongoDB connected successfully');
     } catch (dbError) {
-      console.error('❌ MongoDB connection error:', dbError);
-      throw dbError; // Re-throw to be caught by outer try-catch
+      console.error('❌ Failed to connect to MongoDB:', dbError.message);
+      // Don't exit immediately, allow the server to start in a degraded state
+      console.log('⚠️  Running in degraded mode without database connection');
     }
-    
-    // Start HTTP server with better error handling
-    console.log(`🌐 Starting HTTP server on ${HOST}:${PORT}...`);
-    
-    // Start listening
-    httpServer.listen(Number(PORT), HOST, () => {
-      console.log(`\n${'='.repeat(50)}`);
-      console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
-      console.log(`🌐 Server URL: http://${HOST}:${PORT}`);
-      console.log(`📡 WebSocket: ws://${HOST}:${PORT}`);
-      console.log(`📊 MongoDB: ${mongoose.connection.host} (${mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'})`);
-      console.log(`☁️  Cloudinary: ${cloudinary.config().cloud_name ? 'connected' : 'not configured'}`);
-      console.log(`📅 ${new Date().toLocaleString()}`);
-      console.log(`${'='.repeat(50)}\n`);
+
+    // Create HTTP server
+    const server = httpServer.listen(PORT, HOST, () => {
+      console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+      console.log('📡 Ready to handle requests');
+    });
+
+    // Track active connections
+    trackConnections(server);
+
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (err) => {
+      console.error('UNHANDLED REJECTION! 💥', err.name, err.message);
+      console.error(err.stack);
       
-      // Log all environment variables (excluding sensitive ones) for debugging
-      console.log('🛠️  Environment:');
-      Object.entries(process.env).forEach(([key, value]) => {
-        if (key.includes('SECRET') || key.includes('KEY') || key.includes('PASSWORD')) {
-          console.log(`   ${key}=[REDACTED]`);
-        } else if (key.startsWith('NODE_') || key.startsWith('npm_') || key === 'PATH' || key === 'HOME') {
-          // Skip common Node/npm env vars
-        } else {
-          console.log(`   ${key}=${value}`);
-        }
+      if (!isShuttingDown) {
+        console.log('Gracefully shutting down...');
+        isShuttingDown = true;
+        
+        // Close the server and exit after a timeout
+        server.close(() => {
+          console.log('Server closed');
+          process.exit(1);
+        });
+        
+        // Force close after timeout
+        setTimeout(() => {
+          console.error('Forcing shutdown...');
+          process.exit(1);
+        }, 10000);
+      }
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (err) => {
+      console.error('UNCAUGHT EXCEPTION! 💥', err.name, err.message);
+      console.error(err.stack);
+      
+      if (!isShuttingDown) {
+        isShuttingDown = true;
+        console.log('Gracefully shutting down...');
+        
+        // Close the server and exit after a timeout
+        server.close(() => {
+          console.log('Server closed');
+          process.exit(1);
+        });
+        
+        // Force close after timeout
+        setTimeout(() => {
+          console.error('Forcing shutdown...');
+          process.exit(1);
+        }, 10000);
+      }
+    });
+
+    // Handle SIGTERM for graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM received. Gracefully shutting down...');
+      gracefulShutdown('SIGTERM', () => {
+        closeConnections();
+        server.close(() => {
+          console.log('Server closed');
+          process.exit(0);
+        });
       });
-      console.log('\n✅ Server started successfully!');
     });
-    
-    // Handle server errors
-    httpServer.on('error', (error) => {
-      if (error.syscall !== 'listen') {
-        throw error;
-      }
-      
-      // Handle specific listen errors with friendly messages
-      switch (error.code) {
-        case 'EACCES':
-          console.error(`Port ${PORT} requires elevated privileges`);
-          process.exit(1);
-          break;
-        case 'EADDRINUSE':
-          console.error(`Port ${PORT} is already in use`);
-          process.exit(1);
-          break;
-        default:
-          throw error;
-      }
+
+    // Handle SIGINT (Ctrl+C)
+    process.on('SIGINT', () => {
+      console.log('SIGINT received. Gracefully shutting down...');
+      gracefulShutdown('SIGINT', () => {
+        closeConnections();
+        server.close(() => {
+          console.log('Server closed');
+          process.exit(0);
+        });
+      });
     });
-    
+
+    return server;
   } catch (error) {
     console.error('❌ Failed to start server:', error);
+    console.error(error.stack);
+    
+    // Attempt to close any open connections
+    closeConnections();
+    
+    // Exit with error code
     process.exit(1);
   }
 };
