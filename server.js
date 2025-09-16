@@ -403,67 +403,76 @@ app.all('*', (req, res, next) => {
 // Global error handling middleware
 app.use(globalErrorHandler);
 
-// Graceful shutdown
-let isShuttingDown = false;
-const gracefulShutdown = async () => {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
+// Server state management
+const serverState = {
+  isShuttingDown: false,
+  activeConnections: new Set(),
   
-  console.log('Shutting down gracefully...');
+  // Track active connections
+  trackConnections(server) {
+    server.on('connection', (connection) => {
+      this.activeConnections.add(connection);
+      connection.on('close', () => {
+        this.activeConnections.delete(connection);
+      });
+    });
+  },
   
-  try {
-    // Close HTTP server
-    await new Promise((resolve) => httpServer.close(() => {
-      console.log('HTTP server closed');
-      resolve();
-    }));
+  // Close all active connections
+  closeConnections() {
+    console.log('Closing all active connections...');
+    this.activeConnections.forEach(connection => {
+      connection.destroy();
+      this.activeConnections.delete(connection);
+    });
+  },
+  
+  // Graceful shutdown handler
+  async gracefulShutdown() {
+    if (this.isShuttingDown) return;
+    this.isShuttingDown = true;
     
-    // Close MongoDB connection
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.close(false);
-      console.log('MongoDB connection closed');
+    console.log('Shutting down gracefully...');
+    
+    try {
+      // Close HTTP server
+      await new Promise((resolve) => httpServer.close(() => {
+        console.log('HTTP server closed');
+        resolve();
+      }));
+      
+      // Close MongoDB connection
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close(false);
+        console.log('MongoDB connection closed');
+      }
+      
+      // Close WebSocket connections
+      if (webSocketService) {
+        webSocketService.io.close();
+        console.log('WebSocket server closed');
+      }
+      
+      // Close any remaining connections
+      this.closeConnections();
+      
+      console.log('Shutdown complete');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during shutdown:', error);
+      process.exit(1);
     }
-    
-    // Close WebSocket connections
-    if (webSocketService) {
-      webSocketService.io.close();
-      console.log('WebSocket server closed');
-    }
-    
-    console.log('Shutdown complete');
-    process.exit(0);
-  } catch (error) {
-    console.error('Error during shutdown:', error);
-    process.exit(1);
   }
 };
+
+// Alias for backward compatibility
+const gracefulShutdown = serverState.gracefulShutdown.bind(serverState);
 
 // Start server with enhanced error handling
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Track server state
-let isShuttingDown = false;
-const activeConnections = new Set();
-
-// Track active connections
-const trackConnections = (server) => {
-  server.on('connection', (connection) => {
-    activeConnections.add(connection);
-    connection.on('close', () => {
-      activeConnections.delete(connection);
-    });
-  });
-};
-
-// Close all active connections
-const closeConnections = () => {
-  console.log('Closing all active connections...');
-  activeConnections.forEach(connection => {
-    connection.destroy();
-    activeConnections.delete(connection);
-  });
-};
+// Server state is now managed by the serverState object
 
 // Log unhandled rejections with more details
 process.on('unhandledRejection', (reason, promise) => {
@@ -535,7 +544,7 @@ const startServer = async () => {
     });
 
     // Track active connections
-    trackConnections(server);
+    serverState.trackConnections(server);
 
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err) => {
@@ -572,25 +581,13 @@ const startServer = async () => {
     // Handle SIGTERM for graceful shutdown
     process.on('SIGTERM', () => {
       console.log('SIGTERM received. Gracefully shutting down...');
-      gracefulShutdown('SIGTERM', () => {
-        closeConnections();
-        server.close(() => {
-          console.log('Server closed');
-          process.exit(0);
-        });
-      });
+      serverState.gracefulShutdown();
     });
 
     // Handle SIGINT (Ctrl+C)
     process.on('SIGINT', () => {
       console.log('SIGINT received. Gracefully shutting down...');
-      gracefulShutdown('SIGINT', () => {
-        closeConnections();
-        server.close(() => {
-          console.log('Server closed');
-          process.exit(0);
-        });
-      });
+      serverState.gracefulShutdown();
     });
 
     return server;
