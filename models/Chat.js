@@ -5,11 +5,6 @@ const chatSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  participants: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  }],
   isGroupChat: {
     type: Boolean,
     default: false
@@ -95,6 +90,5 @@ chatSchema.pre('remove', async function(next) {
 });
 
 const Chat = mongoose.model('Chat', chatSchema);
-const Message = mongoose.model('Message', messageSchema);
 
-export { Chat, Message };
+export default Chat;

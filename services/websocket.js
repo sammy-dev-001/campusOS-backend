@@ -2,7 +2,6 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Chat from '../models/Chat.js';
-import { dbGet } from '../config/db.js';
 import WebSocketEvents from './websocketEvents.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
