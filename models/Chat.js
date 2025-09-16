@@ -1,52 +1,5 @@
 import mongoose from 'mongoose';
 
-const messageSchema = new mongoose.Schema({
-  content: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  sender: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  media: [{
-    url: String,
-    mediaType: {
-      type: String,
-      enum: ['image', 'video', 'document'],
-      default: 'image'
-    },
-    publicId: String // Cloudinary public ID
-  }],
-  readBy: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  reactions: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    emoji: {
-      type: String,
-      required: true
-    }
-  }],
-  isPinned: {
-    type: Boolean,
-    default: false
-  },
-  replyTo: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Message'
-  }
-}, {
-  timestamps: true
-});
-
 const chatSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -61,10 +14,23 @@ const chatSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  groupAdmin: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  },
+  participants: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    lastRead: Date,
+    unreadCount: {
+      type: Number,
+      default: 0
+    },
+    isAdmin: {
+      type: Boolean,
+      default: false
+    },
+    _id: false
+  }],
   groupImage: {
     url: String,
     publicId: String // Cloudinary public ID
@@ -73,7 +39,17 @@ const chatSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Message'
   },
-  messages: [messageSchema],
+  settings: {
+    isMuted: {
+      type: Boolean,
+      default: false
+    },
+    customNotifications: {
+      type: Boolean,
+      default: false
+    },
+    _id: false
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -86,7 +62,9 @@ const chatSchema = new mongoose.Schema({
   timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: function(doc, ret) {
+    transform: function (doc, ret) {
+      ret.id = ret._id;
+      delete ret._id;
       delete ret.__v;
       return ret;
     }

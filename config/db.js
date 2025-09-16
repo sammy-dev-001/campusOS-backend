@@ -62,21 +62,28 @@ const connectDB = async () => {
       throw new Error('MongoDB connection string is not defined. Please set MONGODB_URI environment variable.');
     }
 
+    const isAtlas = process.env.MONGODB_URI.includes('mongodb+srv://');
+    
     const options = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // Timeout after 10s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-      family: 4, // Use IPv4, skip trying IPv6
-      maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+      // Connection settings
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      family: 4,
+      
+      // Only set SSL options for Atlas connections
+      ...(isAtlas ? {
+        ssl: true,
+        tlsAllowInvalidCertificates: true,
+        tlsAllowInvalidHostnames: true
+      } : {})
     };
 
+    console.log(chalk.blue('🔌 Connecting to MongoDB...'));
     await mongoose.connect(process.env.MONGODB_URI, options);
     
-    // Connection successful, log the host
-    console.log(chalk.blue(`MongoDB Connected: ${mongoose.connection.host}`));
+    console.log(chalk.green(`✅ Connected to MongoDB: ${mongoose.connection.host}`));
     
     // Enable Mongoose query logging in development
     if (process.env.NODE_ENV === 'development') {
@@ -86,9 +93,12 @@ const connectDB = async () => {
     return mongoose.connection;
   } catch (error) {
     console.error(chalk.red(`❌ MongoDB connection error: ${error.message}`));
+    console.error('Connection URI:', process.env.MONGODB_URI ? 'Provided' : 'Not provided');
+    if (error.code) console.error('Error code:', error.code);
+    if (error.codeName) console.error('Code name:', error.codeName);
     
     // If this is a connection error, retry after a delay
-    if (error.name === 'MongooseServerSelectionError') {
+    if (error.name === 'MongooseServerSelectionError' || error.name === 'MongoServerSelectionError') {
       console.log(chalk.yellow('Retrying connection in 5 seconds...'));
       await new Promise(resolve => setTimeout(resolve, 5000));
       return connectDB();
