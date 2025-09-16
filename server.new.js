@@ -31,6 +31,10 @@ import authRoutes from './routes/auth.js';
 import postRoutes from './routes/posts.js';
 import chatRoutes from './routes/chats.js';
 import userRoutes from './routes/users.js';
+import announcementRoutes from './routes/announcementRoutes.js';
+import tutorRoutes from './routes/tutorRoutes.js';
+import timetableRoutes from './routes/timetableRoutes.js';
+import pollRoutes from './routes/polls.js';
 
 // Get the current file and directory names
 const __filename = fileURLToPath(import.meta.url);
@@ -282,11 +286,15 @@ app.get(`${API_PREFIX}/health`, (req, res) => {
   res.status(200).json(healthCheck);
 });
 
-// API routes
-app.use(`${API_PREFIX}/auth`, authRoutes);
-app.use(`${API_PREFIX}/posts`, postRoutes);
-app.use(`${API_PREFIX}/chats`, chatRoutes);
-app.use(`${API_PREFIX}/users`, userRoutes);
+// Mount routes
+app.use('/api/auth', authRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/tutors', tutorRoutes);
+app.use('/api/timetables', timetableRoutes);
+app.use('/api/polls', pollRoutes);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
