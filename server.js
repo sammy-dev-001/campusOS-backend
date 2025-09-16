@@ -1,412 +1,435 @@
-import bcrypt from 'bcryptjs';
-import cors from 'cors';
+import 'dotenv/config';
 import express from 'express';
-import multer from 'multer';
-import os from 'os';
-import path from 'path';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import multer from 'multer';
+import path from 'path';
 import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
+import hpp from 'hpp';
+import xss from 'xss-clean';
+import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { WebSocketService } from './services/websocket.js';
-import { 
-  User, 
-  Post, 
-  Comment, 
-  Chat, 
-  Message, 
-  Event, 
-  Notification 
-} from './models/index.js';
+import { connectDB } from './config/db.js';
+import globalErrorHandler from './middleware/errorHandler.js';
+import AppError from './utils/appError.js';
 
-// Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/campusOS', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+// Import models - This ensures models are registered with Mongoose
+import './models/User.js';
+import './models/Post.js';
+import './models/Chat.js';
 
-const db = mongoose.connection;
+// Import routes
+import authRoutes from './routes/auth.js';
+import postRoutes from './routes/posts.js';
+import chatRoutes from './routes/chats.js';
+import userRoutes from './routes/users.js';
+import announcementRoutes from './routes/announcementRoutes.js';
+import tutorRoutes from './routes/tutorRoutes.js';
+import timetableRoutes from './routes/timetableRoutes.js';
+import pollRoutes from './routes/polls.js';
 
-db.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
-
-db.once('open', () => {
-  console.log('Connected to MongoDB');
-});
-
-// Define __dirname for ES modules
+// Get the current file and directory names
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Utility to get the local network IP address
-function getLocalExternalIp() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] || []) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return 'localhost';
+// Check for required environment variables
+const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'JWT_EXPIRES_IN',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  process.exit(1);
 }
 
-// Configure multer for profile pictures and general uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, 'uploads');
-    if (!fs.existsSync(uploadDir)){
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage: storage });
-
-// Configure multer storage for posts
-const postStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, 'uploads', 'posts');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-// Configure multer for post uploads
-const postUpload = multer({
-  storage: postStorage,
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and MP4 files are allowed.'));
-    }
-  }
-});
-
-// Configure multer storage for chat uploads
-const chatUploadStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, 'uploads', 'chats');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const chatUpload = multer({ storage: chatUploadStorage });
-
-// Configure multer storage for document uploads
-const documentUploadStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, 'uploads', 'documents');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-const documentUpload = multer({ storage: documentUploadStorage });
-
-// Multer storage for event images
-const eventStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, 'uploads', 'events');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const eventUpload = multer({ storage: eventStorage });
-
+// Initialize express app
 const app = express();
 
 // Create HTTP server
-const httpServer = require('http').createServer(app);
+const httpServer = createServer(app);
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Trust proxy for production
+app.enable('trust proxy');
 
-// Enable CORS with specific configuration
-const corsOptions = {
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Content-Length', 'X-Requested-With'],
-  credentials: true,
-  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
-};
-
-// Apply CORS to all routes
-app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
-
-// Parse JSON bodies for all requests
-app.use(express.json());
+// Set security HTTP headers
+app.use(helmet());
 
 // Configure CORS
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+const corsOptions = {
+  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // 10 minutes
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Limit requests from same API
+const limiter = rateLimit({
+  max: 1000, // 1000 requests per hour
+  windowMs: 60 * 60 * 1000, // 1 hour
+  message: 'Too many requests from this IP, please try again in an hour!'
+});
+app.use('/api', limiter);
+
+// Body parser, reading data from body into req.body
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(cookieParser());
+
+// Data sanitization against NoSQL query injection
+app.use(mongoSanitize());
+
+// Data sanitization against XSS
+app.use(xss());
+
+// Prevent parameter pollution
+app.use(hpp({
+  whitelist: [
+    'duration', 'ratingsQuantity', 'ratingsAverage', 'maxGroupSize', 'difficulty', 'price'
+  ]
 }));
 
+// Serving static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Compression middleware
+app.use(compression());
+
+// Initialize Socket.IO with enhanced configuration
 const io = new Server(httpServer, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true
+  },
+  // Enable connection state recovery
+  connectionStateRecovery: {
+    // The backup duration of the sessions and the packets
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+    // Skip middlewares upon successful recovery
+    skipMiddlewares: true,
+  },
+  // Enable per-message deflation
+  perMessageDeflate: {
+    zlibDeflateOptions: {
+      // See zlib defaults
+      chunkSize: 1024,
+      memLevel: 7,
+      level: 3
+    },
+    zlibInflateOptions: {
+      chunkSize: 10 * 1024
+    },
+    // Other options
+    clientNoContextTakeover: true, // Defaults to negotiated value
+    serverNoContextTakeover: true, // Defaults to negotiated value
+    serverMaxWindowBits: 10, // Defaults to negotiated value
+    concurrencyLimit: 10, // Limits zlib concurrency for performance
+    threshold: 1024 // Size (in bytes) below which messages should not be compressed
+  },
+  // Enable HTTP long-polling as fallback
+  transports: ['websocket', 'polling'],
+  // Enable HTTP compression
+  httpCompression: true,
+  // Maximum size of the HTTP request body
+  maxHttpBufferSize: 1e8 // 100MB
 });
 
 // Initialize WebSocket service
-const webSocketService = new WebSocketService(httpServer);
-
-// Make WebSocket service available to routes
+const webSocketService = new WebSocketService(io);
 app.set('webSocketService', webSocketService);
 
-// Import routes
-import pollsRouter from './routes/polls.js';
-
-// ... rest of the code remains the same ...
-app.get('/events', async (req, res) => {
-  try {
-    const events = await dbAll('SELECT * FROM events ORDER BY date ASC, time ASC');
-    console.log('DEBUG all events:', events);
-    const featured = events.filter(e => e.isFeatured);
-    const upcoming = events.filter(e => !e.isFeatured);
-    // Prepend full image URL if needed
-    const makeImageUrl = img => img && !img.startsWith('http') ? `${req.protocol}://${req.get('host')}/uploads/events/${img}` : img;
-    const mapEvent = e => ({ ...e, image: makeImageUrl(e.image), isFeatured: !!e.isFeatured });
-    res.json({
-      featured: featured.map(mapEvent),
-      upcoming: upcoming.map(mapEvent)
-    });
-  } catch (err) {
-    console.error('Error fetching events:', err);
-    res.status(500).json({ message: 'Server error fetching events.' });
-  }
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: process.env.NODE_ENV === 'production',
+  api_proxy: process.env.CLOUDINARY_PROXY,
+  cdn_subdomain: true,
+  secure_distribution: true,
+  cname: process.env.CLOUDINARY_CNAME,
+  private_cdn: !!process.env.CLOUDINARY_PRIVATE_CDN,
+  sign_url: !!process.env.CLOUDINARY_SIGN_URL,
+  ssl_detected: true
 });
 
-// POST /events - create a new event (with image upload)
-app.post('/events', eventUpload.single('image'), async (req, res) => {
-  try {
-    const { title, description, date, time, location, category, isFeatured } = req.body;
-    if (!title || !date || !time || !location || !category) {
-      return res.status(400).json({ message: 'Missing required fields.' });
+// Test Cloudinary connection
+cloudinary.api.ping()
+  .then(() => console.log('Connected to Cloudinary'))
+  .catch(err => console.error('Cloudinary connection error:', err));
+
+// Create storage engines for different types of uploads
+const createCloudinaryStorage = (folder, resourceType = 'auto') => {
+  return new CloudinaryStorage({
+    cloudinary,
+    params: (req, file) => {
+      // Generate a unique filename
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const originalName = file.originalname.split('.');
+      const extension = originalName[originalName.length - 1];
+      const filename = `${originalName[0].substring(0, 100)}-${uniqueSuffix}.${extension}`;
+      
+      return {
+        folder: `campusOS/${folder}`,
+        public_id: filename,
+        resource_type: resourceType,
+        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'webm', 'pdf', 'doc', 'docx', 'txt'],
+        format: extension,
+        transformation: [
+          { width: 2000, crop: 'limit', quality: 'auto' },
+          { fetch_format: 'auto' }
+        ]
+      };
     }
-    const image = req.file ? req.file.filename : null;
-    const result = await dbRun(
-      `INSERT INTO events (title, image, description, date, time, location, category, isFeatured) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, image, description, date, time, location, category, String(isFeatured) === '1' ? 1 : 0]
-    );
-    res.status(201).json({
-      id: result.lastID,
-      title, image, description, date, time, location, category, isFeatured: !!isFeatured
-    });
-  } catch (err) {
-    console.error('Error creating event:', err);
-    res.status(500).json({ message: 'Server error creating event.' });
+  });
+};
+
+// File filter for images
+const imageFileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image')) {
+    cb(null, true);
+  } else {
+    cb(new AppError('Not an image! Please upload only images.', 400), false);
   }
+};
+
+// File filter for videos
+const videoFileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('video')) {
+    cb(null, true);
+  } else {
+    cb(new AppError('Not a video! Please upload only videos.', 400), false);
+  }
+};
+
+// Configure multer uploads with different settings for different file types
+const profilePicUpload = multer({
+  storage: createCloudinaryStorage('profile_pictures', 'image'),
+  fileFilter: imageFileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
 });
 
-// Add this endpoint if not present:
-app.get('/users/:id', async (req, res) => {
-  const userId = req.params.id;
-  try {
-    const user = await dbGet('SELECT id, username, display_name, profile_picture FROM users WHERE id = ?', [userId]);
-    let profilePictureUrl = user && user.profile_picture;
-    if (profilePictureUrl && !profilePictureUrl.startsWith('http')) {
-      profilePictureUrl = `${req.protocol}://${req.get('host')}/uploads/${profilePictureUrl.split('/').pop()}`;
-    }
-    const response = { ...user, profile_picture: profilePictureUrl || null };
-    console.log('USER INFO RESPONSE:', response);
-    res.json(response);
-  } catch (err) {
-    console.error('Error fetching user info:', err);
-    res.status(500).json({ message: 'Server error fetching user info.' });
-  }
-});
-
-// --- Create Forum Thread Endpoint ---
-app.post('/forum-threads', async (req, res) => {
-  const { title, content, category, author_id, author_name } = req.body;
-  if (!title || !content || !category || !author_id || !author_name) {
-    return res.status(400).json({ message: 'Missing required fields.' });
-  }
-  try {
-    const result = await dbRun(
-      'INSERT INTO forum_threads (title, content, category, author_id, author_name) VALUES (?, ?, ?, ?, ?)',
-      [title, content, category, author_id, author_name]
-    );
-    const thread = await dbGet('SELECT * FROM forum_threads WHERE id = ?', [result.lastID]);
-    res.status(201).json(thread);
-  } catch (err) {
-    console.error('Error creating forum thread:', err);
-    res.status(500).json({ message: 'Server error creating forum thread.' });
-  }
-});
-
-// --- Get Forum Threads Endpoint ---
-app.get('/forum-threads', async (req, res) => {
-  const { category } = req.query;
-  try {
-    let threads;
-    if (category) {
-      threads = await dbAll('SELECT * FROM forum_threads WHERE category = ? ORDER BY timestamp DESC', [category]);
+const postUpload = multer({
+  storage: createCloudinaryStorage('posts'),
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image') || file.mimetype.startsWith('video')) {
+      cb(null, true);
     } else {
-      threads = await dbAll('SELECT * FROM forum_threads ORDER BY timestamp DESC');
+      cb(new AppError('Not an image or video! Please upload only images or videos.', 400), false);
     }
-    res.json(threads);
-  } catch (err) {
-    console.error('Error fetching forum threads:', err);
-    res.status(500).json({ message: 'Server error fetching forum threads.' });
-  }
+  },
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
 
-// --- Add Forum Comment Endpoint ---
-app.post('/forum-threads/:threadId/comments', async (req, res) => {
-  const { threadId } = req.params;
-  const { user_id, username, content, parent_comment_id } = req.body;
-  if (!user_id || !username || !content) {
-    return res.status(400).json({ message: 'Missing required fields.' });
-  }
-  try {
-    const result = await dbRun(
-      'INSERT INTO forum_comments (thread_id, user_id, username, content, parent_comment_id) VALUES (?, ?, ?, ?, ?)',
-      [threadId, user_id, username, content, parent_comment_id || null]
-    );
-    const comment = await dbGet('SELECT * FROM forum_comments WHERE id = ?', [result.lastID]);
-    res.status(201).json(comment);
-  } catch (err) {
-    console.error('Error creating forum comment:', err);
-    res.status(500).json({ message: 'Server error creating forum comment.' });
-  }
-});
-
-// --- Get Forum Comments Endpoint ---
-app.get('/forum-threads/:threadId/comments', async (req, res) => {
-  const { threadId } = req.params;
-  try {
-    const comments = await dbAll('SELECT * FROM forum_comments WHERE thread_id = ? ORDER BY timestamp ASC', [threadId]);
-    res.json(comments);
-  } catch (err) {
-    console.error('Error fetching forum comments:', err);
-    res.status(500).json({ message: 'Server error fetching forum comments.' });
-  }
-});
-
-// --- Get All Users Endpoint (for @ mention autocomplete) ---
-// Note: This endpoint is already defined above, so we're removing this duplicate definition
-
-// --- Upvote/Like a Forum Thread Endpoint ---
-app.post('/forum-threads/:id/upvote', async (req, res) => {
-  const { id } = req.params;
-  const { increment = true } = req.body;
-  try {
-    await dbRun(
-      `UPDATE forum_threads SET upvotes = CASE WHEN upvotes IS NULL THEN 1 ELSE upvotes + (${increment ? 1 : -1}) END WHERE id = ?`,
-      [id]
-    );
-    const thread = await dbGet('SELECT * FROM forum_threads WHERE id = ?', [id]);
-    res.json(thread);
-  } catch (err) {
-    console.error('Error upvoting thread:', err);
-    res.status(500).json({ message: 'Server error upvoting thread.' });
-  }
-});
-
-// Test route
-app.get('/test', (req, res) => {
-  console.log('Test endpoint hit!');
-  res.json({ status: 'success', message: 'Backend is working!' });
-});
-
-// Global error handler (after routes) to return JSON for Multer errors
-app.use((err, req, res, next) => {
-  if (err && err.name === 'MulterError') {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: 'File too large. Max allowed size is 50MB.' });
+const documentUpload = multer({
+  storage: createCloudinaryStorage('documents', 'raw'),
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('application/pdf') || 
+        file.mimetype.includes('document') || 
+        file.mimetype.includes('text')) {
+      cb(null, true);
+    } else {
+      cb(new AppError('Not a supported document format!', 400), false);
     }
-    return res.status(400).json({ message: err.message || 'Upload error.' });
-  }
-  next(err);
+  },
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB
 });
 
-// Server configuration
+// Make upload middlewares available to routes
+app.set('profilePicUpload', profilePicUpload);
+app.set('postUpload', postUpload);
+app.set('documentUpload', documentUpload);
+
+// Add Cloudinary to app locals for direct access in routes
+app.locals.cloudinary = cloudinary;
+
+// API Routes
+const API_PREFIX = '/api/v1';
+
+// Health check endpoint
+app.get(`${API_PREFIX}/health`, (req, res) => {
+  const healthCheck = {
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    database: {
+      status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      url: process.env.MONGODB_URI ? 
+           process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured'
+    },
+    services: {
+      cloudinary: !!cloudinary.config().cloud_name,
+      websocket: webSocketService ? 'running' : 'not running'
+    },
+    environment: process.env.NODE_ENV || 'development',
+    memoryUsage: process.memoryUsage()
+  };
+  
+  res.status(200).json(healthCheck);
+});
+
+// Mount routes
+app.use('/api/auth', authRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/tutors', tutorRoutes);
+app.use('/api/timetables', timetableRoutes);
+app.use('/api/polls', pollRoutes);
+
+// Serve static assets in production
+if (process.env.NODE_ENV === 'production') {
+  // Set static folder
+  app.use(express.static(path.join(__dirname, '../client/build')));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
+  });
+}
+
+// Handle 404 - Not Found
+app.all('*', (req, res, next) => {
+  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+});
+
+// Global error handling middleware
+app.use(globalErrorHandler);
+
+// Graceful shutdown
+let isShuttingDown = false;
+const gracefulShutdown = async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  console.log('Shutting down gracefully...');
+  
+  try {
+    // Close HTTP server
+    await new Promise((resolve) => httpServer.close(() => {
+      console.log('HTTP server closed');
+      resolve();
+    }));
+    
+    // Close MongoDB connection
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close(false);
+      console.log('MongoDB connection closed');
+    }
+    
+    // Close WebSocket connections
+    if (webSocketService) {
+      webSocketService.io.close();
+      console.log('WebSocket server closed');
+    }
+    
+    console.log('Shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Start server
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Start the application
-initializeServer();
-
-// New endpoint to get all study groups for joining (doesn't require user participation)
-app.get('/study-groups', async (req, res) => {
-  try {
-    // Get all study groups
-    const query = `
-      SELECT c.* FROM chats c
-      WHERE c.type = 'study_group'
-      ORDER BY c.created_at DESC
-    `;
-    
-    const studyGroups = await dbAll(query);
-    
-    // For each study group, get participants count and basic info
-    for (const group of studyGroups) {
-      // Get participant count
-      const participantCount = await dbGet(
-        'SELECT COUNT(*) as count FROM chat_participants WHERE chat_id = ?',
-        [group.id]
-      );
-      group.participants_count = participantCount.count;
-      
-      // Get participants list (for display purposes)
-      group.participants = await dbAll(`
-        SELECT u.id, u.username, u.display_name as displayName, u.profile_picture as profilePicture
-        FROM users u
-        JOIN chat_participants cp ON u.id = cp.user_id
-        WHERE cp.chat_id = ?
-      `, [group.id]);
-      
-      // For group chats, include groupImage as a full URL if present
-      if (group.group_image) {
-        group.groupImage = group.group_image;
-        if (group.groupImage && !group.groupImage.startsWith('http')) {
-          group.groupImage = `${req.protocol}://${req.get('host')}/uploads/${group.groupImage.split('/').pop()}`;
-        }
-      }
-    }
-    
-    res.json(studyGroups);
-  } catch (err) {
-    console.error('Error fetching study groups:', err);
-    res.status(500).json({ message: 'Server error fetching study groups.' });
+// Log unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Consider whether to shut down or not based on the error
+  // For development, you might want to keep the server running
+  if (process.env.NODE_ENV === 'production') {
+    gracefulShutdown();
   }
 });
+
+// Log uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Attempt to log the error to an external service
+  // Then decide whether to shut down or not
+  if (process.env.NODE_ENV === 'production') {
+    gracefulShutdown();
+  }
+});
+
+// Handle termination signals
+['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
+  process.on(signal, () => {
+    console.log(`${signal} received. Starting graceful shutdown...`);
+    gracefulShutdown();
+  });
+});
+
+// Start the application
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectDB();
+    
+    // Start HTTP server
+    httpServer.listen(PORT, HOST, () => {
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
+      console.log(`🌐 Server URL: http://${HOST}:${PORT}`);
+      console.log(`📡 WebSocket: ws://${HOST}:${PORT}`);
+      console.log(`📊 MongoDB: ${mongoose.connection.host} (${mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'})`);
+      console.log(`☁️  Cloudinary: ${cloudinary.config().cloud_name ? 'connected' : 'not configured'}`);
+      console.log(`📅 ${new Date().toLocaleString()}`);
+      console.log(`${'='.repeat(50)}\n`);
+    });
+    
+    // Handle server errors
+    httpServer.on('error', (error) => {
+      if (error.syscall !== 'listen') {
+        throw error;
+      }
+      
+      // Handle specific listen errors with friendly messages
+      switch (error.code) {
+        case 'EACCES':
+          console.error(`Port ${PORT} requires elevated privileges`);
+          process.exit(1);
+          break;
+        case 'EADDRINUSE':
+          console.error(`Port ${PORT} is already in use`);
+          process.exit(1);
+          break;
+        default:
+          throw error;
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Only start the server if this file is run directly (not required/imported)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startServer();
+}
+
+export { app, httpServer, webSocketService };
