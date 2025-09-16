@@ -2,8 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
-// Define schema without any virtuals first
-const userSchemaDefinition = {
+const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: [true, 'Username is required'],
@@ -51,8 +50,6 @@ const userSchemaDefinition = {
     minlength: [2, 'Full name must be at least 2 characters'],
     maxlength: [100, 'Full name cannot exceed 100 characters']
   },
-  // ... (rest of the schema fields remain the same)
-  // [Previous schema fields continue...]
   profilePic: {
     type: String,
     default: ''
@@ -167,10 +164,7 @@ const userSchemaDefinition = {
   passwordResetExpires: Date,
   emailVerificationToken: String,
   emailVerificationExpires: Date
-};
-
-// Create schema with options
-const userSchema = new mongoose.Schema(userSchemaDefinition, {
+}, {
   timestamps: true,
   toJSON: {
     virtuals: true,
@@ -182,17 +176,9 @@ const userSchema = new mongoose.Schema(userSchemaDefinition, {
   }
 });
 
-// Add indexes
+// Indexes
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
-
-// Add virtual for user's initials (using a different name to avoid conflicts)
-userSchema.virtual('userInitials').get(function() {
-  if (this.firstName && this.lastName) {
-    return `${this.firstName[0]}${this.lastName[0]}`.toUpperCase();
-  }
-  return this.username ? this.username.substring(0, 2).toUpperCase() : 'US';
-});
 
 // Pre-save hook to set fullName and handle timestamps
 userSchema.pre('save', function(next) {
@@ -214,6 +200,14 @@ userSchema.pre('save', function(next) {
   }
   
   next();
+});
+
+// Add initials virtual
+userSchema.virtual('initials').get(function() {
+  if (this.firstName && this.lastName) {
+    return `${this.firstName[0]}${this.lastName[0]}`.toUpperCase();
+  }
+  return this.username ? this.username.substring(0, 2).toUpperCase() : 'US';
 });
 
 // Method to check if user has a specific role
@@ -287,7 +281,6 @@ userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
   return false;
 };
 
-// Create and export the model
 const User = mongoose.model('User', userSchema);
 
 export default User;
