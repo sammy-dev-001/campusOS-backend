@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
 import Poll from '../models/Poll.js';
 import User from '../models/User.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { auth } from '../middleware/auth.js';
 import asyncHandler from 'express-async-handler';
 import AppError from '../utils/appError.js';
 
@@ -37,7 +37,7 @@ const getPollWithResults = async (pollId, userId) => {
 };
 
 // Create a new poll
-router.post('/', authenticateToken, asyncHandler(async (req, res, next) => {
+router.post('/', auth, asyncHandler(async (req, res, next) => {
   const { question, description, options, isMultipleChoice, isAnonymous, groupId, expiresAt } = req.body;
   const userId = req.user.id;
 
@@ -136,7 +136,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res, next) => {
 }));
 
 // Get single poll with results
-router.get('/:pollId', authenticateToken, asyncHandler(async (req, res, next) => {
+router.get('/:pollId', auth, asyncHandler(async (req, res, next) => {
   const { pollId } = req.params;
   const userId = req.user.id;
 
@@ -151,7 +151,7 @@ router.get('/:pollId', authenticateToken, asyncHandler(async (req, res, next) =>
 }));
 
 // Vote on a poll
-router.post('/:pollId/vote', authenticateToken, asyncHandler(async (req, res, next) => {
+router.post('/:pollId/vote', auth, asyncHandler(async (req, res, next) => {
   const { pollId } = req.params;
   const { optionId } = req.body;
   const userId = req.user.id;
@@ -198,7 +198,7 @@ router.post('/:pollId/vote', authenticateToken, asyncHandler(async (req, res, ne
 }));
 
 // Update a poll (only by creator)
-router.patch('/:pollId', authenticateToken, asyncHandler(async (req, res, next) => {
+router.patch('/:pollId', auth, asyncHandler(async (req, res, next) => {
   const { pollId } = req.params;
   const { question, description, expiresAt } = req.body;
   const userId = req.user.id;
@@ -235,7 +235,7 @@ router.patch('/:pollId', authenticateToken, asyncHandler(async (req, res, next) 
 }));
 
 // Delete a poll (only by creator or admin)
-router.delete('/:pollId', authenticateToken, asyncHandler(async (req, res, next) => {
+router.delete('/:pollId', auth, asyncHandler(async (req, res, next) => {
   const { pollId } = req.params;
   const userId = req.user.id;
   const userRole = req.user.role;

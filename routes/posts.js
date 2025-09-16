@@ -1,6 +1,6 @@
 import express from 'express';
 import Post from '../models/Post.js';
-import auth from '../middleware/auth.js';
+import { auth } from '../middleware/auth.js';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 
