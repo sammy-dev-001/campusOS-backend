@@ -268,45 +268,96 @@ app.locals.cloudinary = cloudinary;
 // API Routes
 const API_PREFIX = '/api/v1';
 
+// Root route
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'Welcome to CampusOS API',
+    documentation: 'https://github.com/sammy-dev-001/campusOS-backend',
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
-app.get(`${API_PREFIX}/health`, (req, res) => {
+app.get(['/health', `${API_PREFIX}/health`], (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  const isHealthy = dbStatus === 'connected';
+  
   const healthCheck = {
-    status: 'ok',
+    status: isHealthy ? 'ok' : 'error',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     database: {
-      status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      status: dbStatus,
       url: process.env.MONGODB_URI ? 
-           process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured'
+           process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured',
+      ping: mongoose.connection.db ? 'available' : 'unavailable'
     },
     services: {
       cloudinary: !!cloudinary.config().cloud_name,
       websocket: webSocketService ? 'running' : 'not running'
     },
     environment: process.env.NODE_ENV || 'development',
-    memoryUsage: process.memoryUsage()
+    memory: {
+      rss: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB`,
+      heapTotal: `${(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)} MB`,
+      heapUsed: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`
+    },
+    node: {
+      version: process.version,
+      platform: process.platform,
+      pid: process.pid
+    }
   };
   
-  res.status(200).json(healthCheck);
+  res.status(isHealthy ? 200 : 503).json(healthCheck);
 });
 
-// Mount routes
-app.use('/api/auth', authRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/announcements', announcementRoutes);
-app.use('/api/tutors', tutorRoutes);
-app.use('/api/timetables', timetableRoutes);
-app.use('/api/polls', pollRoutes);
+// Mount API routes with versioning
+app.use(`${API_PREFIX}/auth`, authRoutes);
+app.use(`${API_PREFIX}/posts`, postRoutes);
+app.use(`${API_PREFIX}/chats`, chatRoutes);
+app.use(`${API_PREFIX}/users`, userRoutes);
+app.use(`${API_PREFIX}/announcements`, announcementRoutes);
+app.use(`${API_PREFIX}/tutors`, tutorRoutes);
+app.use(`${API_PREFIX}/timetables`, timetableRoutes);
+app.use(`${API_PREFIX}/polls`, pollRoutes);
 
-// API route for checking if the server is running
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'API is running',
-    timestamp: new Date().toISOString()
-  });
+// 404 handler for API routes
+app.all(`${API_PREFIX}/*`, (req, res, next) => {
+  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  err.statusCode = err.statusCode || 500;
+  err.status = err.status || 'error';
+
+  if (process.env.NODE_ENV === 'development') {
+    console.error('Error:', err);
+    res.status(err.statusCode).json({
+      status: err.status,
+      message: err.message,
+      stack: err.stack,
+      error: err
+    });
+  } else {
+    // Production error handling
+    if (err.isOperational) {
+      res.status(err.statusCode).json({
+        status: err.status,
+        message: err.message
+      });
+    } else {
+      console.error('ERROR 💥', err);
+      res.status(500).json({
+        status: 'error',
+        message: 'Something went very wrong!'
+      });
+    }
+  }
 });
 
 // Handle 404 for API routes
@@ -419,7 +470,8 @@ const startServer = async () => {
     // Start HTTP server with better error handling
     console.log(`🌐 Starting HTTP server on ${HOST}:${PORT}...`);
     
-    httpServer.listen(PORT, HOST, () => {
+    // Start listening
+    httpServer.listen(Number(PORT), HOST, () => {
       console.log(`\n${'='.repeat(50)}`);
       console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
       console.log(`🌐 Server URL: http://${HOST}:${PORT}`);
