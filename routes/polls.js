@@ -74,7 +74,7 @@ router.post('/', auth, asyncHandler(async (req, res, next) => {
 }));
 
 // Get all polls (with pagination)
-router.get('/', authenticateToken, asyncHandler(async (req, res, next) => {
+router.get('/', auth, asyncHandler(async (req, res, next) => {
   const { groupId, page = 1, limit = 10, active = 'true' } = req.query;
   const userId = req.user.id;
   const skip = (page - 1) * limit;
