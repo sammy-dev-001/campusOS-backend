@@ -53,11 +53,10 @@ const registerUser = async (req, res) => {
     // Create new user
     let user;
     try {
-      const hashedPassword = await bcrypt.hash(password, 12);
       user = new User({
         username,
         email,
-        password: hashedPassword,
+        password, // Let the pre-save hook handle hashing
         displayName: displayName || username,
         fullName: fullName || displayName || username
       });

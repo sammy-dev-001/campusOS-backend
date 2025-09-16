@@ -173,26 +173,24 @@ const userSchemaDefinition = {
 const userSchema = new mongoose.Schema(userSchemaDefinition, {
   timestamps: true,
   toJSON: {
-    virtuals: true,
+    virtuals: false,
     transform: function (doc, ret) {
       delete ret.password;
       delete ret.__v;
+      // Manually add the initials if needed
+      if (doc.firstName && doc.lastName) {
+        ret.initials = `${doc.firstName[0]}${doc.lastName[0]}`.toUpperCase();
+      } else if (doc.username) {
+        ret.initials = doc.username.substring(0, 2).toUpperCase();
+      } else {
+        ret.initials = 'US';
+      }
       return ret;
     }
   }
 });
 
-// Add indexes
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
-
-// Add virtual for user's initials (using a different name to avoid conflicts)
-userSchema.virtual('userInitials').get(function() {
-  if (this.firstName && this.lastName) {
-    return `${this.firstName[0]}${this.lastName[0]}`.toUpperCase();
-  }
-  return this.username ? this.username.substring(0, 2).toUpperCase() : 'US';
-});
+// Indexes are automatically created for fields with unique: true
 
 // Pre-save hook to set fullName and handle timestamps
 userSchema.pre('save', function(next) {
@@ -259,9 +257,12 @@ userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
   try {
-    // Hash the password with cost of 12
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
+    // Skip hashing if the password is already hashed
+    if (!this.password.startsWith('$2a$') && !this.password.startsWith('$2b$')) {
+      // Hash the password with cost of 12
+      const salt = await bcrypt.genSalt(12);
+      this.password = await bcrypt.hash(this.password, salt);
+    }
     
     // Set passwordChangedAt if not a new user
     if (!this.isNew) {
