@@ -8,17 +8,42 @@ const router = express.Router();
 // Register a new user
 const registerUser = async (req, res) => {
   try {
-    let { username, email, password, loginUsername, displayName } = req.body;
+    console.log('Received request body:', req.body);
+    console.log('Request headers:', req.headers);
     
-    // Handle the frontend's signup format
-    if (loginUsername && displayName) {
-      username = loginUsername;
-      // Use displayName for the username or another field if needed
+    const { username, email, password, displayName, fullName } = req.body;
+    
+    console.log('Parsed signup request:', { 
+      username, 
+      email, 
+      hasPassword: !!password, 
+      displayName, 
+      fullName 
+    });
+    
+    // Validate required fields
+    if (!username || !email || !password || !displayName || !fullName) {
+      const missingFields = [];
+      if (!username) missingFields.push('username');
+      if (!email) missingFields.push('email');
+      if (!password) missingFields.push('password');
+      if (!displayName) missingFields.push('displayName');
+      if (!fullName) missingFields.push('fullName');
+      
+      console.error('Missing required fields:', missingFields);
+      return res.status(400).json({ 
+        message: 'All fields are required',
+        missingFields 
+      });
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
+      console.log('User already exists:', { 
+        email: existingUser.email === email ? email : null, 
+        username: existingUser.username === username ? username : null 
+      });
       return res.status(400).json({ 
         message: 'User already exists',
         field: existingUser.email === email ? 'email' : 'username'
@@ -26,42 +51,135 @@ const registerUser = async (req, res) => {
     }
 
     // Create new user
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const user = new User({
-      username,
-      email,
-      password: hashedPassword,
-      displayName: displayName || username,
-    });
+    let user;
+    try {
+      const hashedPassword = await bcrypt.hash(password, 12);
+      user = new User({
+        username,
+        email,
+        password: hashedPassword,
+        displayName: displayName || username,
+        fullName: fullName || displayName || username
+      });
 
-    await user.save();
+      await user.save();
+      console.log('User created successfully:', { userId: user._id, email: user.email });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      if (error.name === 'ValidationError') {
+        const errors = Object.values(error.errors).map(err => err.message);
+        return res.status(400).json({ 
+          message: 'Validation failed',
+          errors 
+        });
+      }
+      throw error;
+    }
 
     // Generate JWT token
-    const token = jwt.sign(
-      { id: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    let token;
+    try {
+      token = jwt.sign(
+        { id: user._id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      console.log('JWT token generated for user:', user._id);
+    } catch (error) {
+      console.error('Error generating JWT token:', error);
+      return res.status(500).json({ 
+        message: 'Error generating authentication token',
+        error: error.message 
+      });
+    }
 
+    // Prepare response
+    const userResponse = {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      displayName: user.displayName,
+      fullName: user.fullName,
+      profilePic: user.profilePic
+    };
+
+    console.log('Registration successful:', userResponse);
     res.status(201).json({
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        displayName: user.displayName,
-        profilePic: user.profilePic,
-      },
+      user: userResponse,
       token,
+      message: 'User registered successfully'
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: 'Error registering user', error: error.message });
+    console.error('Registration error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({
+        message: `${field} already exists`,
+        field,
+        value: error.keyValue[field]
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Error registering user', 
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 };
 
 // Register routes for both /register and /signup
 router.post('/register', registerUser);
 router.post('/signup', registerUser);
+
+// Debug endpoint to list all available routes
+router.get('/routes', (req, res) => {
+  const routes = [];
+  router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      // Routes registered directly on the router
+      const methods = Object.keys(middleware.route.methods);
+      routes.push({
+        path: `/api/auth${middleware.route.path}`,
+        methods,
+        type: 'direct'
+      });
+    } else if (middleware.name === 'router') {
+      // Nested routes from router.use()
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const methods = Object.keys(handler.route.methods);
+          routes.push({
+            path: `/api/auth${handler.route.path}`,
+            methods,
+            type: 'nested'
+          });
+        }
+      });
+    }
+  });
+  
+  res.json({
+    status: 'success',
+    results: routes.length,
+    data: {
+      routes
+    }
+  });
+});
+
+// Log all available routes on server start
+console.log('Available auth routes:');
+router.stack.forEach((r) => {
+  if (r.route && r.route.path) {
+    console.log(`- ${Object.keys(r.route.methods).map(m => m.toUpperCase()).join('|')} /api/auth${r.route.path}`);
+  }
+});
 
 // User login
 router.post('/login', async (req, res) => {

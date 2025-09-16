@@ -25,15 +25,18 @@ const userSchema = new mongoose.Schema({
     minlength: [8, 'Password must be at least 8 characters'],
     select: false
   },
-  firstName: {
+  displayName: {
     type: String,
     trim: true,
-    maxlength: [50, 'First name cannot exceed 50 characters']
+    required: [true, 'Display name is required'],
+    minlength: [2, 'Display name must be at least 2 characters'],
+    maxlength: [50, 'Display name cannot exceed 50 characters']
   },
   bio: {
     type: String,
     trim: true,
-    maxlength: [500, 'Bio cannot exceed 500 characters']
+    maxlength: [500, 'Bio cannot exceed 500 characters'],
+    default: ''
   },
   groups: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -47,7 +50,10 @@ const userSchema = new mongoose.Schema({
   },
   fullName: {
     type: String,
-    trim: true
+    trim: true,
+    required: [true, 'Full name is required'],
+    minlength: [2, 'Full name must be at least 2 characters'],
+    maxlength: [100, 'Full name cannot exceed 100 characters']
   },
   profilePic: {
     type: String,
