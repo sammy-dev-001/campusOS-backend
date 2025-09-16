@@ -30,6 +30,16 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: [50, 'First name cannot exceed 50 characters']
   },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Bio cannot exceed 500 characters']
+  },
+  groups: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Group',
+    default: []
+  }],
   lastName: {
     type: String,
     trim: true,

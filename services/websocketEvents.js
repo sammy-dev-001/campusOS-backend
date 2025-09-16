@@ -1,4 +1,8 @@
-import { dbGet } from '../config/db.js';
+import mongoose from 'mongoose';
+import User from '../models/User.js';
+import Group from '../models/Group.js';
+import ForumThread from '../models/ForumThread.js';
+import ForumSubscription from '../models/ForumSubscription.js';
 
 export class WebSocketEvents {
   constructor(io) {
@@ -12,11 +16,17 @@ export class WebSocketEvents {
    */
   async getUserStudyGroups(userId) {
     try {
-      const groups = await dbGet(
-        'SELECT group_id as id FROM study_group_members WHERE user_id = ?',
-        [userId]
-      );
-      return groups || [];
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return [];
+      }
+      
+      const user = await User.findById(userId).populate('groups');
+      if (!user) {
+        return [];
+      }
+      
+      // Return array of group IDs the user is a member of
+      return user.groups || [];
     } catch (error) {
       console.error('Error getting user study groups:', error);
       return [];
@@ -30,11 +40,12 @@ export class WebSocketEvents {
    */
   async getUserForumSubscriptions(userId) {
     try {
-      const subscriptions = await dbGet(
-        'SELECT thread_id FROM forum_subscriptions WHERE user_id = ?',
-        [userId]
-      );
-      return subscriptions.map(sub => sub.thread_id);
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return [];
+      }
+      
+      const subscriptions = await ForumSubscription.find({ user: userId });
+      return subscriptions.map(sub => sub.thread.toString());
     } catch (error) {
       console.error('Error getting forum subscriptions:', error);
       return [];

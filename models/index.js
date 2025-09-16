@@ -6,6 +6,16 @@ import Message from './Message.js';
 import Event from './Event.js';
 import Notification from './Notification.js';
 import Comment from './Comment.js';
+import Poll from './Poll.js';
+import Group from './Group.js';
+import ForumThread from './ForumThread.js';
+import ForumSubscription from './ForumSubscription.js';
+
+// Import other models here
+import './Announcement.js';
+import './Document.js';
+import './Timetable.js';
+import './Tutor.js';
 
 export {
   User,
@@ -14,7 +24,11 @@ export {
   Message,
   Event,
   Notification,
-  Comment
+  Comment,
+  Poll,
+  Group,
+  ForumThread,
+  ForumSubscription
 };
 
 export default mongoose;
