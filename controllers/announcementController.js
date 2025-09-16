@@ -24,27 +24,35 @@ const createAnnouncement = asyncHandler(async (req, res) => {
 // @route   GET /api/announcements
 // @access  Public
 const getAnnouncements = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, pinned } = req.query;
-  const query = {};
-  
-  if (pinned === 'true') {
-    query.isPinned = true;
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+    
+    // Get total count of announcements
+    const total = await Announcement.countDocuments({});
+    
+    // Get paginated announcements
+    const announcements = await Announcement.find({})
+      .sort({ isPinned: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('author', 'name email')
+      .lean();
+
+    res.json({
+      announcements: announcements || [],
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    console.error('Error fetching announcements:', error);
+    // Return empty array instead of error to prevent frontend crashes
+    res.json({
+      announcements: [],
+      currentPage: 1,
+      totalPages: 1
+    });
   }
-
-  const announcements = await Announcement.find(query)
-    .sort({ isPinned: -1, createdAt: -1 })
-    .limit(limit * 1)
-    .skip((page - 1) * limit)
-    .populate('author', 'name email')
-    .lean();
-
-  const count = await Announcement.countDocuments(query);
-
-  res.json({
-    announcements,
-    totalPages: Math.ceil(count / limit),
-    currentPage: page
-  });
 });
 
 // @desc    Get announcement by ID

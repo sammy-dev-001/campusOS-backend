@@ -44,8 +44,14 @@ router.post('/', auth, async (req, res) => {
 // Get all chats for a user
 router.get('/', auth, async (req, res) => {
   try {
+    const userId = req.query.userId || req.user.id;
+    
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+    
     const chats = await Chat.find({
-      participants: req.user.id
+      participants: userId
     })
       .populate('participants', 'username profilePic')
       .populate('lastMessage')
