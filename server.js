@@ -291,8 +291,13 @@ app.locals.cloudinary = cloudinary;
 // API Routes
 const API_PREFIX = '/api/v1';
 
+// Root endpoint for health checks
+app.get('/', (req, res) => {
+  res.status(200).send('CampusOS backend is running 🚀');
+});
+
 // Health check endpoints
-app.get(['/', '/health', `${API_PREFIX}/health`], (req, res) => {
+app.get(['/health', `${API_PREFIX}/health`], (req, res) => {
   const isHealthy = mongoose.connection.readyState === 1;
   const healthCheck = {
     status: isHealthy ? 'ok' : 'degraded',
@@ -352,7 +357,7 @@ app.use('/api/timetables', timetableRoutes);
 app.use('/api/polls', pollRoutes);
 app.use('/api/health', healthRoutes);
 
-// Root health check endpoint
+// Legacy health check redirect
 app.get('/health', (req, res) => {
   res.redirect(`${API_PREFIX}/health`);
 });
