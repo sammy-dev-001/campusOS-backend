@@ -60,8 +60,18 @@ if (missingVars.length > 0) {
 // Initialize express app
 const app = express();
 
-// Create HTTP server
+// Create HTTP server with keep-alive settings
 const httpServer = createServer(app);
+
+// Set keep-alive timeout to 60 seconds
+httpServer.keepAliveTimeout = 60000; // 60 seconds
+httpServer.headersTimeout = 65000; // 65 seconds (must be > keepAliveTimeout)
+
+// Enable TCP keep-alive
+httpServer.on('connection', (socket) => {
+  socket.setKeepAlive(true);
+  socket.setTimeout(0); // Disable auto-close of idle connections
+});
 
 // Trust proxy for production
 app.enable('trust proxy');
@@ -281,32 +291,20 @@ app.locals.cloudinary = cloudinary;
 // API Routes
 const API_PREFIX = '/api/v1';
 
-// Root route
-app.get('/', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Welcome to CampusOS API',
-    documentation: 'https://github.com/sammy-dev-001/campusOS-backend',
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Health check endpoint
-app.get(['/health', `${API_PREFIX}/health`], (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  const isHealthy = dbStatus === 'connected';
-  
+// Health check endpoints
+app.get(['/', '/health', `${API_PREFIX}/health`], (req, res) => {
+  const isHealthy = mongoose.connection.readyState === 1;
   const healthCheck = {
-    status: isHealthy ? 'ok' : 'error',
+    status: isHealthy ? 'ok' : 'degraded',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+    service: 'CampusOS API',
+    version: '1.0.0',
+    documentation: 'https://github.com/sammy-dev-001/campusOS-backend',
     database: {
-      status: dbStatus,
+      status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
       url: process.env.MONGODB_URI ? 
-           process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured',
-      ping: mongoose.connection.db ? 'available' : 'unavailable'
+           process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured'
     },
     services: {
       cloudinary: !!cloudinary.config().cloud_name,
@@ -314,18 +312,22 @@ app.get(['/health', `${API_PREFIX}/health`], (req, res) => {
     },
     environment: process.env.NODE_ENV || 'development',
     memory: {
-      rss: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)} MB`,
-      heapTotal: `${(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)} MB`,
-      heapUsed: `${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`
+      rss: `${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`,
+      heapTotal: `${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)} MB`,
+      heapUsed: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`,
+      external: `${Math.round(process.memoryUsage().external / 1024 / 1024)} MB`
     },
-    node: {
-      version: process.version,
-      platform: process.platform,
-      pid: process.pid
-    }
+    node: process.version,
+    platform: process.platform,
+    arch: process.arch
   };
   
   res.status(isHealthy ? 200 : 503).json(healthCheck);
+});
+
+// Simple ping endpoint for load balancers
+app.get('/ping', (req, res) => {
+  res.status(200).send('pong');
 });
 
 // Mount API routes with versioning
@@ -468,9 +470,9 @@ const serverState = {
 // Alias for backward compatibility
 const gracefulShutdown = serverState.gracefulShutdown.bind(serverState);
 
-// Start server with enhanced error handling
-const PORT = process.env.PORT || 5000;
+// Server configuration
 const HOST = process.env.HOST || '0.0.0.0';
+const PORT = process.env.PORT || 10000; // Use Render's PORT environment variable.
 
 // Server state is now managed by the serverState object
 
@@ -524,23 +526,26 @@ process.on('warning', (warning) => {
 // Start the application
 const startServer = async () => {
   try {
-    console.log('🔍 Starting server initialization...');
+    // Connect to MongoDB
+    console.log('🔗 Connecting to MongoDB...');
+    await connectDB();
     
-    // Connect to MongoDB with retry logic
-    try {
-      console.log('🔗 Connecting to MongoDB...');
-      await connectDB();
-      console.log('✅ MongoDB connected successfully');
-    } catch (dbError) {
-      console.error('❌ Failed to connect to MongoDB:', dbError.message);
-      // Don't exit immediately, allow the server to start in a degraded state
-      console.log('⚠️  Running in degraded mode without database connection');
-    }
-
-    // Create HTTP server
+    // Start HTTP server
+    console.log('🚀 Starting HTTP server...');
     const server = httpServer.listen(PORT, HOST, () => {
-      console.log(`🚀 Server running on http://${HOST}:${PORT}`);
-      console.log('📡 Ready to handle requests');
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
+      console.log(`🌐 Server URL: http://${HOST}:${PORT}`);
+      console.log(`📡 WebSocket: ws://${HOST}:${PORT}`);
+      console.log(`📊 MongoDB: ${mongoose.connection.host} (${mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'})`);
+      console.log(`☁️  Cloudinary: ${cloudinary.config().cloud_name ? 'connected' : 'not configured'}`);
+      console.log(`📅 ${new Date().toLocaleString()}`);
+      console.log(`${'='.repeat(50)}\n`);
+      
+      // Emit ready event for process managers
+      if (process.send) {
+        process.send('ready');
+      }
     });
 
     // Track active connections
@@ -606,20 +611,13 @@ const startServer = async () => {
 // Only start the server if this file is run directly (not required/imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
   console.log('🚀 Starting server...');
-  startServer().catch(error => {
-    console.error('💥 Failed to start server:', error);
-    process.exit(1);
-  });
   
-  // Handle SIGTERM and SIGINT for graceful shutdown
-  process.on('SIGTERM', () => {
-    console.log('\n🛑 SIGTERM received. Starting graceful shutdown...');
-    gracefulShutdown();
-  });
-  
-  process.on('SIGINT', () => {
-    console.log('\n🛑 SIGINT received. Starting graceful shutdown...');
-    gracefulShutdown();
+  // Handle process messages (used by PM2 and other process managers)
+  process.on('message', (msg) => {
+    if (msg === 'shutdown') {
+      console.log('Received shutdown message from process manager');
+      gracefulShutdown();
+    }
   });
   
   // Handle uncaught exceptions
@@ -628,12 +626,35 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('Error:', error);
     console.error('Stack:', error.stack);
     
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('⚠️  Server kept alive in development mode due to uncaught exception');
-      return;
-    }
-    
+    // Attempt to gracefully shut down
     gracefulShutdown();
+  });
+  
+  // Handle unhandled rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('\n❌ UNHANDLED REJECTION!');
+    console.error('Reason:', reason);
+    console.error('Promise:', promise);
+    
+    // In production, we might want to shut down, but in development,
+    // we can keep the server running for debugging
+    if (process.env.NODE_ENV === 'production') {
+      gracefulShutdown();
+    }
+  });
+  
+  // Handle process termination signals
+  ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
+    process.on(signal, () => {
+      console.log(`\n${signal} received. Starting graceful shutdown...`);
+      gracefulShutdown();
+    });
+  });
+  
+  // Start the server
+  startServer().catch(error => {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
   });
 }
 
