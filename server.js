@@ -470,9 +470,9 @@ const serverState = {
 // Alias for backward compatibility
 const gracefulShutdown = serverState.gracefulShutdown.bind(serverState);
 
-// Server configuration
-const HOST = process.env.HOST || '0.0.0.0';
-const PORT = process.env.PORT || 10000; // Use Render's PORT environment variable.
+// Server configuration - Use Render's PORT environment variable
+const HOST = '0.0.0.0'; // Always bind to all interfaces for Render
+const PORT = process.env.PORT || 10000; // Required for Render deployment
 
 // Server state is now managed by the serverState object
 
@@ -533,14 +533,14 @@ const startServer = async () => {
     // Start HTTP server
     console.log('🚀 Starting HTTP server...');
     const server = httpServer.listen(PORT, HOST, () => {
-      console.log(`\n${'='.repeat(50)}`);
+      console.log('\n' + '='.repeat(50));
       console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
-      console.log(`🌐 Server URL: http://${HOST}:${PORT}`);
-      console.log(`📡 WebSocket: ws://${HOST}:${PORT}`);
+      console.log(`🌐 Server URL: http://0.0.0.0:${PORT}`);
+      console.log(`📡 WebSocket: ws://0.0.0.0:${PORT}`);
       console.log(`📊 MongoDB: ${mongoose.connection.host} (${mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'})`);
       console.log(`☁️  Cloudinary: ${cloudinary.config().cloud_name ? 'connected' : 'not configured'}`);
       console.log(`📅 ${new Date().toLocaleString()}`);
-      console.log(`${'='.repeat(50)}\n`);
+      console.log('='.repeat(50) + '\n');
       
       // Emit ready event for process managers
       if (process.send) {
