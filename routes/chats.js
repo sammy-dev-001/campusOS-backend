@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { auth } from '../middleware/auth.js';
 import { Chat, User } from '../models/index.js';
 
@@ -50,17 +51,32 @@ router.get('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'User ID is required' });
     }
     
+    // Convert userId to ObjectId if it's a valid string
+    let userIdObj;
+    try {
+      userIdObj = mongoose.Types.ObjectId(userId);
+    } catch (err) {
+      console.error('Invalid user ID format:', userId);
+      return res.status(400).json({ message: 'Invalid user ID format' });
+    }
+    
+    console.log('Fetching chats for user ID:', userId);
+    
     const chats = await Chat.find({
-      participants: userId
+      participants: userIdObj
     })
       .populate('participants', 'username profilePic')
       .populate('lastMessage')
       .sort({ updatedAt: -1 });
       
+    console.log(`Found ${chats.length} chats for user ${userId}`);
     res.json(chats);
   } catch (error) {
     console.error('Error fetching chats:', error);
-    res.status(500).json({ message: 'Error fetching chats' });
+    res.status(500).json({ 
+      message: 'Error fetching chats',
+      error: error.message 
+    });
   }
 });
 
