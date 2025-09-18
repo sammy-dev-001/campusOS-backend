@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { auth, admin } from '../middleware/auth.js';
+import { auth, admin, restrictTo } from '../middleware/auth.js';
 import {
   uploadDocument,
   getAllDocuments,

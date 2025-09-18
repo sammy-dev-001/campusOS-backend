@@ -55,13 +55,20 @@ export const admin = async (req, res, next) => {
 };
 
 // Middleware to restrict access to specific roles
-export const restrictTo = (...roles) => {
+export const restrictTo = (...allowedRoles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // Allow admins to access all routes
+    if (req.user.role === 'admin') {
+      return next();
+    }
+    
+    // Check if user's role is in the allowed roles
+    if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ 
         message: 'You do not have permission to perform this action' 
       });
     }
+    
     next();
   };
 };
