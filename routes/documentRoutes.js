@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { protect, restrictTo } from '../middleware/auth.js';
+import { auth, admin } from '../middleware/auth.js';
 import {
   uploadDocument,
   getAllDocuments,
@@ -26,7 +26,7 @@ const upload = multer({
 });
 
 // Apply authentication to all routes
-router.use(protect);
+router.use(auth);
 
 // Document stats (admin/instructor only)
 router.get('/stats/:courseId', restrictTo('admin', 'instructor'), getDocumentStats);
