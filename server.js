@@ -36,6 +36,7 @@ import tutorRoutes from './routes/tutorRoutes.js';
 import timetableRoutes from './routes/timetableRoutes.js';
 import pollRoutes from './routes/polls.js';
 import healthRoutes from './routes/health.js';
+import documentRoutes from './routes/documentRoutes.js';
 
 // Get the current file and directory names
 const __filename = fileURLToPath(import.meta.url);
@@ -344,6 +345,7 @@ app.use(`${API_PREFIX}/announcements`, announcementRoutes);
 app.use(`${API_PREFIX}/tutors`, tutorRoutes);
 app.use(`${API_PREFIX}/timetables`, timetableRoutes);
 app.use(`${API_PREFIX}/polls`, pollRoutes);
+app.use(`${API_PREFIX}/documents`, documentRoutes);
 app.use(`${API_PREFIX}/health`, healthRoutes);
 
 // Mount non-versioned API routes for backward compatibility
@@ -355,6 +357,7 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/tutors', tutorRoutes);
 app.use('/api/timetables', timetableRoutes);
 app.use('/api/polls', pollRoutes);
+app.use('/api/documents', documentRoutes);
 app.use('/api/health', healthRoutes);
 
 // Legacy health check redirect
