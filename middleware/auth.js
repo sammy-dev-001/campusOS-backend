@@ -53,3 +53,15 @@ export const admin = async (req, res, next) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// Middleware to restrict access to specific roles
+export const restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: 'You do not have permission to perform this action' 
+      });
+    }
+    next();
+  };
+};
