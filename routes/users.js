@@ -111,6 +111,26 @@ router.post('/me/avatar', auth, async (req, res) => {
   }
 });
 
+// Get user's profile picture
+router.get('/:id/profile-picture', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('profilePic');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    if (!user.profilePic) {
+      return res.status(404).json({ message: 'Profile picture not found' });
+    }
+    
+    res.json({ profilePicture: user.profilePic });
+  } catch (error) {
+    console.error('Error fetching profile picture:', error);
+    res.status(500).json({ message: 'Error fetching profile picture' });
+  }
+});
+
 // Get user's posts
 router.get('/:id/posts', auth, async (req, res) => {
   try {
