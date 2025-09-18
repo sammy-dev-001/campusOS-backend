@@ -188,12 +188,14 @@ router.post('/login', async (req, res) => {
     // Check if user exists - explicitly include password field
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
+      console.log('No user found with email:', email);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Check password using the model method
-    const isMatch = await user.comparePassword(password);
+    // Check password using the correct method signature
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log('Password mismatch for user:', email);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
