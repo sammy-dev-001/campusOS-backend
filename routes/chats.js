@@ -45,32 +45,31 @@ router.post('/', auth, async (req, res) => {
 // Get all chats for a user
 router.get('/', auth, async (req, res) => {
   try {
-    const userId = req.query.userId || req.user.id;
+    const userId = req.query.userId || req.user?.id;
     
     if (!userId) {
+      console.error('No user ID provided');
       return res.status(400).json({ message: 'User ID is required' });
     }
-    
-    // Convert userId to ObjectId if it's a valid string
-    let userIdObj;
-    try {
-      userIdObj = mongoose.Types.ObjectId(userId);
-    } catch (err) {
+
+    // For MongoDB ObjectId validation
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
       console.error('Invalid user ID format:', userId);
       return res.status(400).json({ message: 'Invalid user ID format' });
     }
     
     console.log('Fetching chats for user ID:', userId);
     
+    // Find chats where the user is a participant
     const chats = await Chat.find({
-      participants: userIdObj
+      'participants.user': new mongoose.Types.ObjectId(userId)
     })
-      .populate('participants', 'username profilePic')
+      .populate('participants.user', 'username profilePic')
       .populate('lastMessage')
       .sort({ updatedAt: -1 });
       
     console.log(`Found ${chats.length} chats for user ${userId}`);
-    res.json(chats);
+    res.json(chats || []);
   } catch (error) {
     console.error('Error fetching chats:', error);
     res.status(500).json({ 
