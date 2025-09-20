@@ -10,36 +10,79 @@ import { getPublicIdFromUrl } from '../utils/fileUpload.js';
  */
 export const uploadDocument = async (req, res, next) => {
   try {
-    if (!req.file) {
+    console.log('Request body:', req.body);
+    console.log('Request files:', req.files);
+
+    if (!req.files || !req.files.length) {
+      console.error('No files in request');
       return next(new AppError('Please upload a file', 400));
     }
 
-    // Get file info
-    const fileType = getFileType(req.file.mimetype);
+    // Get the file from the request
+    const file = req.files[0];
+    console.log('Processing file:', file);
+
+    // Get metadata from request body
+    const metadata = req.body.metadata || {};
+    if (typeof metadata === 'string') {
+      try {
+        metadata = JSON.parse(metadata);
+      } catch (e) {
+        console.error('Error parsing metadata:', e);
+        return next(new AppError('Invalid metadata format', 400));
+      }
+    }
     
+    // Get file info
+    const fileType = getFileType(file.mimetype || 'application/octet-stream');
+    
+    // Log file info for debugging
+    console.log('Processing file upload:', {
+      originalName: file.originalname || file.name || 'unnamed',
+      mimeType: file.mimetype,
+      size: file.size,
+      type: fileType,
+      metadata: metadata
+    });
+
+    // Check if file has buffer
+    if (!file.buffer || !Buffer.isBuffer(file.buffer)) {
+      console.error('Invalid file buffer');
+      return next(new AppError('Invalid file data', 400));
+    }
+
     // Upload to Cloudinary
     const uploadResult = await uploadSingleFile(
-      req.file.buffer,
+      file.buffer,
       'documents',
       {
         resource_type: fileType === 'image' ? 'image' : 'raw',
-        format: fileType === 'other' ? undefined : fileType
+        format: fileType === 'other' ? undefined : fileType,
+        public_id: `${Date.now()}-${(file.originalname || file.name || 'file').split('.')[0]}`
       }
     );
 
     // Create document in database
     const document = await Document.create({
-      title: req.body.title || req.file.originalname.split('.')[0],
-      description: req.body.description,
+      title: metadata.title || (file.originalname || file.name || 'Document').split('.')[0],
+      description: metadata.description || '',
       fileUrl: uploadResult.secure_url,
       fileType,
-      fileSize: req.file.size,
-      mimeType: req.file.mimetype,
+      fileSize: file.size,
+      mimeType: file.mimetype || 'application/octet-stream',
       createdBy: req.user.id,
-      course: req.body.courseId,
-      tags: req.body.tags ? req.body.tags.split(',').map(tag => tag.trim()) : [],
-      isPublic: req.body.isPublic === 'true'
+      course: metadata.courseId || null,
+      tags: metadata.tags || [],
+      isPublic: metadata.isPublic === true,
+      // Additional fields from metadata
+      courseCode: metadata.courseCode || '',
+      level: metadata.level || '',
+      semester: metadata.semester || '',
+      docType: metadata.docType || 'Notes',
+      uploaderName: metadata.uploaderName || ''
     });
+
+    console.log('Document created successfully:', document._id);
 
     res.status(201).json({
       status: 'success',
@@ -48,6 +91,7 @@ export const uploadDocument = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('Error in uploadDocument:', error);
     next(error);
   }
 };
