@@ -1,25 +1,50 @@
-import express from 'express';
-import Post from '../models/Post.js';
-import { auth } from '../middleware/auth.js';
-import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
+import express from 'express';
+import multer from 'multer';
+import { auth } from '../middleware/auth.js';
+import Post from '../models/Post.js';
 
 const router = express.Router();
 
 // Create a new post
-router.post('/', auth, async (req, res) => {
-  try {
-    const { content, media } = req.body;
-    const post = new Post({
-      content,
-      author: req.user.id,
-      media: media || [],
-    });
+// Multer setup for single file upload (image or video)
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-    await post.save();
-    await post.populate('author', 'username profilePic');
-    
-    res.status(201).json(post);
+router.post('/', auth, upload.single('media'), async (req, res) => {
+  try {
+    const { content } = req.body;
+    let mediaUrl = null;
+
+    if (req.file) {
+      // Upload to Cloudinary
+      const result = await cloudinary.uploader.upload_stream(
+        { resource_type: 'auto' },
+        (error, result) => {
+          if (error) {
+            console.error('Cloudinary upload error:', error);
+            return res.status(500).json({ message: 'Cloudinary upload failed' });
+          }
+          mediaUrl = result.secure_url;
+          createAndSavePost();
+        }
+      );
+      // Write file buffer to stream
+      result.end(req.file.buffer);
+    } else {
+      createAndSavePost();
+    }
+
+    async function createAndSavePost() {
+      const post = new Post({
+        content,
+        author: req.user.id,
+        media: mediaUrl ? [mediaUrl] : [],
+      });
+      await post.save();
+      await post.populate('author', 'username profilePic');
+      res.status(201).json(post);
+    }
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({ message: 'Error creating post' });
