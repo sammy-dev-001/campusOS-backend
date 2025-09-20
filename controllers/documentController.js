@@ -1,3 +1,4 @@
+import fs from 'fs';
 import Document from '../models/Document.js';
 import { uploadSingleFile, deleteFromCloudinary } from '../utils/fileUpload.js';
 import AppError from '../utils/appError.js';
@@ -13,14 +14,12 @@ export const uploadDocument = async (req, res, next) => {
     console.log('Request body:', req.body);
     console.log('Request files:', req.files);
 
-    if (!req.files || !req.files.length) {
-      console.error('No files in request');
+    // Get the file from formidable
+    const file = req.files.file;
+    if (!file) {
+      console.error('No file in request');
       return next(new AppError('Please upload a file', 400));
     }
-
-    // Get the file from the request
-    const file = req.files[0];
-    console.log('Processing file:', file);
 
     // Get metadata from request body
     const metadata = req.body.metadata || {};
@@ -38,33 +37,48 @@ export const uploadDocument = async (req, res, next) => {
     
     // Log file info for debugging
     console.log('Processing file upload:', {
-      originalName: file.originalname || file.name || 'unnamed',
+      originalName: file.originalFilename || file.name || 'unnamed',
       mimeType: file.mimetype,
       size: file.size,
       type: fileType,
+      filePath: file.filepath,
       metadata: metadata
     });
 
-    // Check if file has buffer
-    if (!file.buffer || !Buffer.isBuffer(file.buffer)) {
-      console.error('Invalid file buffer');
-      return next(new AppError('Invalid file data', 400));
+    // Read the file into a buffer
+    let fileBuffer;
+    try {
+      fileBuffer = await fs.promises.readFile(file.filepath);
+      console.log(`Read ${fileBuffer.length} bytes from ${file.filepath}`);
+    } catch (readError) {
+      console.error('Error reading file:', readError);
+      return next(new AppError('Error reading uploaded file', 500));
     }
 
     // Upload to Cloudinary
     const uploadResult = await uploadSingleFile(
-      file.buffer,
+      fileBuffer,
       'documents',
       {
         resource_type: fileType === 'image' ? 'image' : 'raw',
         format: fileType === 'other' ? undefined : fileType,
-        public_id: `${Date.now()}-${(file.originalname || file.name || 'file').split('.')[0]}`
+        public_id: `${Date.now()}-${(file.originalFilename || 'file').split('.')[0]}`,
+        filename_override: file.originalFilename
       }
     );
 
+    // Clean up the temp file
+    try {
+      await fs.promises.unlink(file.filepath);
+      console.log(`Cleaned up temp file: ${file.filepath}`);
+    } catch (cleanupError) {
+      console.error('Error cleaning up temp file:', cleanupError);
+      // Don't fail the request if cleanup fails
+    }
+
     // Create document in database
     const document = await Document.create({
-      title: metadata.title || (file.originalname || file.name || 'Document').split('.')[0],
+      title: metadata.title || (file.originalFilename || 'Document').split('.')[0],
       description: metadata.description || '',
       fileUrl: uploadResult.secure_url,
       fileType,

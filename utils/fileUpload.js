@@ -27,61 +27,81 @@ const RETRY_DELAY = 2000; // 2 seconds
 
 const uploadToCloudinary = async (fileBuffer, folder, options = {}, retryCount = 0) => {
   return new Promise((resolve, reject) => {
-    const uploadOptions = {
-      folder: `campusos/${folder}`,
-      resource_type: 'auto',
-      timeout: 120000, // 2 minutes timeout
-      chunk_size: 20000000, // 20MB chunks for large files
-      ...options,
-    };
+    try {
+      const uploadOptions = {
+        folder: `campusos/${folder}`,
+        resource_type: 'auto',
+        timeout: 120000, // 2 minutes timeout
+        chunk_size: 20000000, // 20MB chunks for large files
+        ...options,
+      };
 
-    const uploadStream = cloudinary.uploader.upload_stream(
-      uploadOptions,
-      async (error, result) => {
-        if (error) {
-          console.error(`Cloudinary upload error (attempt ${retryCount + 1}):`, error);
-          
-          // Retry logic for timeout errors
-          if ((error.http_code === 499 || error.name === 'TimeoutError') && retryCount < MAX_RETRIES) {
-            console.log(`Retrying upload (${retryCount + 1}/${MAX_RETRIES})...`);
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
-            return uploadToCloudinary(fileBuffer, folder, options, retryCount + 1)
-              .then(resolve)
-              .catch(reject);
-          }
-          
-          return reject(error);
-        }
-        resolve(result);
+      // Ensure we have a proper buffer
+      let buffer;
+      if (fileBuffer instanceof ArrayBuffer) {
+        buffer = Buffer.from(fileBuffer);
+      } else if (Buffer.isBuffer(fileBuffer)) {
+        buffer = fileBuffer;
+      } else if (fileBuffer?.buffer instanceof ArrayBuffer) {
+        buffer = Buffer.from(fileBuffer.buffer);
+      } else {
+        throw new Error('Invalid file buffer format');
       }
-    );
 
-    // Handle stream errors
-    uploadStream.on('error', (error) => {
-      console.error('Upload stream error:', error);
+      console.log(`Uploading file (${buffer.length} bytes) to folder: ${folder}`);
+      
+      const uploadStream = cloudinary.uploader.upload_stream(
+        uploadOptions,
+        async (error, result) => {
+          if (error) {
+            console.error(`Cloudinary upload error (attempt ${retryCount + 1}):`, error);
+            
+            // Retry logic for timeout errors
+            if ((error.http_code === 499 || error.name === 'TimeoutError') && retryCount < MAX_RETRIES) {
+              console.log(`Retrying upload (${retryCount + 1}/${MAX_RETRIES})...`);
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+              return uploadToCloudinary(buffer, folder, options, retryCount + 1)
+                .then(resolve)
+                .catch(reject);
+            }
+            
+            return reject(error);
+          }
+          console.log('Upload successful:', result.public_id);
+          resolve(result);
+        }
+      );
+
+      // Handle stream errors
+      uploadStream.on('error', (error) => {
+        console.error('Upload stream error:', error);
+        reject(error);
+      });
+
+      // Set a timeout for the upload
+      const timeout = setTimeout(() => {
+        uploadStream.emit('error', new Error('Upload timed out'));
+      }, 120000); // 2 minutes timeout
+
+      // Clean up the timeout when the upload completes
+      uploadStream.on('finish', () => clearTimeout(timeout));
+
+      // Start the upload
+      const readStream = streamifier.createReadStream(buffer);
+      
+      // Handle stream errors
+      readStream.on('error', (error) => {
+        console.error('Read stream error:', error);
+        clearTimeout(timeout);
+        reject(error);
+      });
+      
+      // Pipe the read stream to the upload stream
+      readStream.pipe(uploadStream);
+    } catch (error) {
+      console.error('Error in uploadToCloudinary:', error);
       reject(error);
-    });
-
-    // Set a timeout for the upload
-    const timeout = setTimeout(() => {
-      uploadStream.emit('error', new Error('Upload timed out'));
-    }, 120000); // 2 minutes timeout
-
-    // Clean up the timeout when the upload completes
-    uploadStream.on('finish', () => clearTimeout(timeout));
-
-    // Start the upload
-    const readStream = streamifier.createReadStream(fileBuffer);
-    
-    // Handle stream errors
-    readStream.on('error', (error) => {
-      console.error('Read stream error:', error);
-      clearTimeout(timeout);
-      reject(error);
-    });
-    
-    // Pipe the read stream to the upload stream
-    readStream.pipe(uploadStream);
+    }
   });
 };
 
