@@ -52,7 +52,14 @@ const createPost = async (req, content, mediaFile = null) => {
     try {
       if (req.body.mediaData) {
         const additionalData = JSON.parse(req.body.mediaData);
-        mediaObject = { ...mediaObject, ...additionalData };
+        // Preserve the cloudinary URL from the file upload
+        const { url, ...rest } = additionalData;
+        mediaObject = { 
+          ...mediaObject, 
+          ...rest, 
+          // Always use the cloudinary URL from the file upload
+          url: mediaObject.url 
+        };
       }
     } catch (e) {
       console.log('Error parsing media metadata:', e);
