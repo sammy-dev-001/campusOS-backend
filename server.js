@@ -289,6 +289,11 @@ app.set('documentUpload', documentUpload);
 // Add Cloudinary to app locals for direct access in routes
 app.locals.cloudinary = cloudinary;
 
+// Body parsing middleware - must come before routes
+app.use(express.json({ limit: '10kb' })); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true, limit: '10kb' })); // Parse URL-encoded bodies
+app.use(cookieParser());
+
 // API Routes
 const API_PREFIX = '/api/v1';
 

@@ -1,54 +1,111 @@
-import { v2 as cloudinary } from 'cloudinary';
 import express from 'express';
-import multer from 'multer';
 import { auth } from '../middleware/auth.js';
 import Post from '../models/Post.js';
+import { v2 as cloudinary } from 'cloudinary';
 
 const router = express.Router();
 
-// Create a new post
-// Multer setup for single file upload (image or video)
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
-router.post('/', auth, upload.single('media'), async (req, res) => {
-  try {
-    const { content } = req.body;
-    let mediaUrl = null;
-
-    if (req.file) {
-      // Upload to Cloudinary
-      const result = await cloudinary.uploader.upload_stream(
-        { resource_type: 'auto' },
-        (error, result) => {
-          if (error) {
-            console.error('Cloudinary upload error:', error);
-            return res.status(500).json({ message: 'Cloudinary upload failed' });
-          }
-          mediaUrl = result.secure_url;
-          createAndSavePost();
-        }
-      );
-      // Write file buffer to stream
-      result.end(req.file.buffer);
-    } else {
-      createAndSavePost();
-    }
-
-    async function createAndSavePost() {
-      const post = new Post({
-        content,
-        author: req.user.id,
-        media: mediaUrl ? [mediaUrl] : [],
-      });
-      await post.save();
-      await post.populate('author', 'username profilePic');
-      res.status(201).json(post);
-    }
-  } catch (error) {
-    console.error('Error creating post:', error);
-    res.status(500).json({ message: 'Error creating post' });
+// Get the upload middleware from app settings
+const getUploadMiddleware = (req, res, next) => {
+  const upload = req.app.get('postUpload');
+  if (!upload) {
+    return res.status(500).json({ message: 'Upload middleware not configured' });
   }
+  return upload.single('media')(req, res, next);
+};
+
+// Helper to handle post creation
+const createPost = async (req, content, mediaFile = null) => {
+  const postData = {
+    content: content || '',
+    author: req.user.id,
+    media: []
+  };
+
+  // If we have media data, parse and add it
+  if (mediaFile) {
+    let mediaObject = {
+      url: mediaFile.path,
+      mediaType: mediaFile.mimetype.startsWith('image/') ? 'image' : 
+                mediaFile.mimetype.startsWith('video/') ? 'video' :
+                mediaFile.mimetype.startsWith('audio/') ? 'audio' : 'document',
+      publicId: `post_${Date.now()}`,
+      altText: 'User uploaded content'
+    };
+
+    // Try to parse additional metadata if available
+    try {
+      if (req.body.mediaData) {
+        const additionalData = JSON.parse(req.body.mediaData);
+        mediaObject = { ...mediaObject, ...additionalData };
+      }
+    } catch (e) {
+      console.log('Error parsing media metadata:', e);
+    }
+
+    postData.media = [mediaObject];
+  }
+
+  const post = new Post(postData);
+  await post.save();
+  await post.populate('author', 'username profilePic');
+  return post;
+};
+
+// Create a new post (handles both JSON and form-data)
+router.post('/', auth, async (req, res, next) => {
+  // If content-type is application/json, handle as JSON
+  if (req.is('application/json')) {
+    try {
+      console.log('Received JSON post request:', req.body);
+      const { content } = req.body;
+      
+      if (!content && !req.file) {
+        return res.status(400).json({ message: 'Content or media is required' });
+      }
+      
+      const post = await createPost(req, content);
+      return res.status(201).json(post);
+      
+    } catch (error) {
+      console.error('Error in JSON post handler:', error);
+      return res.status(500).json({ 
+        message: error.message || 'Error creating post',
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+      });
+    }
+  }
+  
+  // Otherwise, use the file upload middleware
+  return getUploadMiddleware(req, res, async (err) => {
+    if (err) {
+      console.error('File upload error:', err);
+      return res.status(400).json({ message: err.message || 'File upload failed' });
+    }
+    
+    try {
+      console.log('Received form-data post request');
+      console.log('Body:', req.body);
+      console.log('File:', req.file);
+      
+      const { content } = req.body;
+      let mediaUrl = null;
+
+      if (!content && !req.file) {
+        return res.status(400).json({ message: 'Content or media is required' });
+      }
+      
+      const post = await createPost(req, content, req.file);
+      return res.status(201).json(post);
+      
+    } catch (error) {
+      console.error('Error in form-data post handler:', error);
+      return res.status(500).json({ 
+        message: error.message || 'Error creating post',
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+      });
+    }
+  });
 });
 
 // Get all posts
