@@ -74,8 +74,37 @@ const createPost = async (req, content, mediaFile = null) => {
   return post;
 };
 
+// Get all posts
+router.get('/', async (req, res) => {
+  try {
+    console.log('Fetching posts with query params:', req.query);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    
+    const posts = await Post.find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('author', 'username profilePic');
+      
+    console.log(`Found ${posts.length} posts`);
+    res.json(posts);
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    res.status(500).json({ message: 'Error fetching posts' });
+  }
+});
+
 // Create a new post (handles both JSON and form-data)
 router.post('/', auth, async (req, res, next) => {
+  console.log('Received post request:', {
+    method: req.method,
+    contentType: req.headers['content-type'],
+    hasFile: !!req.file,
+    body: req.body
+  });
+
   // If content-type is application/json, handle as JSON
   if (req.is('application/json')) {
     try {
