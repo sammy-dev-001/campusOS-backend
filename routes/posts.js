@@ -27,13 +27,25 @@ const createPost = async (req, content, mediaFile = null) => {
     // Get the Cloudinary URL from the uploaded file
     const cloudinaryUrl = mediaFile.path || mediaFile.location || mediaFile.secure_url;
     
+    // Ensure we have a valid URL
+    if (!cloudinaryUrl) {
+      console.error('No valid URL found in mediaFile:', mediaFile);
+      throw new Error('Failed to get media URL');
+    }
+    
+    // Extract filename without extension for publicId
+    const filename = mediaFile.originalname || mediaFile.filename || '';
+    const publicId = filename.split('.')[0] || `post_${Date.now()}`;
+    
     let mediaObject = {
-      url: cloudinaryUrl, // Use the Cloudinary URL
+      url: cloudinaryUrl,
       mediaType: mediaFile.mimetype.startsWith('image/') ? 'image' : 
                 mediaFile.mimetype.startsWith('video/') ? 'video' :
                 mediaFile.mimetype.startsWith('audio/') ? 'audio' : 'document',
-      publicId: mediaFile.filename ? mediaFile.filename.split('.')[0] : `post_${Date.now()}`,
-      altText: 'User uploaded content'
+      publicId: publicId,
+      altText: 'User uploaded content',
+      width: 0,
+      height: 0
     };
 
     // Try to parse additional metadata if available
