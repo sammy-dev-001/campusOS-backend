@@ -24,12 +24,15 @@ const createPost = async (req, content, mediaFile = null) => {
 
   // If we have media data, parse and add it
   if (mediaFile) {
+    // Get the Cloudinary URL from the uploaded file
+    const cloudinaryUrl = mediaFile.path || mediaFile.location || mediaFile.secure_url;
+    
     let mediaObject = {
-      url: mediaFile.path,
+      url: cloudinaryUrl, // Use the Cloudinary URL
       mediaType: mediaFile.mimetype.startsWith('image/') ? 'image' : 
                 mediaFile.mimetype.startsWith('video/') ? 'video' :
                 mediaFile.mimetype.startsWith('audio/') ? 'audio' : 'document',
-      publicId: `post_${Date.now()}`,
+      publicId: mediaFile.filename ? mediaFile.filename.split('.')[0] : `post_${Date.now()}`,
       altText: 'User uploaded content'
     };
 
@@ -88,9 +91,10 @@ router.post('/', auth, async (req, res, next) => {
       console.log('Body:', req.body);
       console.log('File:', req.file);
       
-      const { content } = req.body;
+      const content = req.body.content || '';
       let mediaUrl = null;
 
+      // Only require content if there's no file
       if (!content && !req.file) {
         return res.status(400).json({ message: 'Content or media is required' });
       }
