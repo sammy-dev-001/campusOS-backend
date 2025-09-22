@@ -1,3 +1,22 @@
+// Get all comments for a post
+router.get('/:id/comments', auth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id)
+      .populate({
+        path: 'comments.author',
+        select: 'username profilePic'
+      });
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+    // If comments are subdocuments, just return them
+    // If comments are refs, you may need to adjust this logic
+    res.json(post.comments || []);
+  } catch (error) {
+    console.error('Error fetching comments:', error);
+    res.status(500).json({ message: 'Error fetching comments' });
+  }
+});
 import express from 'express';
 import { auth } from '../middleware/auth.js';
 import Post from '../models/Post.js';
