@@ -1,4 +1,6 @@
-// Get all comments for a post
+// ...existing code...
+
+// Get all comments for a post (must be after router is initialized)
 router.get('/:id/comments', auth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
@@ -20,7 +22,6 @@ router.get('/:id/comments', auth, async (req, res) => {
 import express from 'express';
 import { auth } from '../middleware/auth.js';
 import Post from '../models/Post.js';
-import { v2 as cloudinary } from 'cloudinary';
 
 const router = express.Router();
 
