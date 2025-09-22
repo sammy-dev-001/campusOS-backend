@@ -1,3 +1,9 @@
+import express from 'express';
+import { auth } from '../middleware/auth.js';
+import Post from '../models/Post.js';
+
+const router = express.Router();
+
 // ...existing code...
 
 // Get all comments for a post (must be after router is initialized)
@@ -19,9 +25,6 @@ router.get('/:id/comments', auth, async (req, res) => {
     res.status(500).json({ message: 'Error fetching comments' });
   }
 });
-import express from 'express';
-import { auth } from '../middleware/auth.js';
-import Post from '../models/Post.js';
 
 const router = express.Router();
 
