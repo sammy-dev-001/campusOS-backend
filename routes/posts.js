@@ -2,7 +2,6 @@ import express from 'express';
 import { auth } from '../middleware/auth.js';
 import Post from '../models/Post.js';
 
-const router = express.Router();
 
 // ...existing code...
 
