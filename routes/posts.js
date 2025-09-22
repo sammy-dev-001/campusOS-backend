@@ -2,10 +2,9 @@ import express from 'express';
 import { auth } from '../middleware/auth.js';
 import Post from '../models/Post.js';
 
+const router = express.Router();
 
-// ...existing code...
-
-// Get all comments for a post (must be after router is initialized)
+// Get all comments for a post
 router.get('/:id/comments', auth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
@@ -24,8 +23,6 @@ router.get('/:id/comments', auth, async (req, res) => {
     res.status(500).json({ message: 'Error fetching comments' });
   }
 });
-
-const router = express.Router();
 
 // Get the upload middleware from app settings
 const getUploadMiddleware = (req, res, next) => {
