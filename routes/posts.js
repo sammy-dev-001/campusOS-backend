@@ -261,16 +261,18 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
     
-    // Check if the user is the author
-    if (post.author.toString() !== req.user.id) {
+    // Check if the user is the author or an admin
+    if (post.author.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized to delete this post' });
     }
     
-    await post.remove();
-    res.json({ message: 'Post removed' });
+    // Delete the post
+    await Post.findByIdAndDelete(req.params.id);
+    
+    res.json({ message: 'Post removed successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);
-    res.status(500).json({ message: 'Error deleting post' });
+    res.status(500).json({ message: 'Error deleting post', error: error.message });
   }
 });
 

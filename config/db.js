@@ -78,15 +78,32 @@ const RECONNECT_INTERVAL = 5000; // 5 seconds
 const configureMongoOptions = () => {
   const isAtlas = process.env.MONGODB_URI?.includes('mongodb+srv://');
   
-  return {
+  const options = {
     ...mongoOptions,
-    // Only set SSL options for Atlas connections
-    ...(isAtlas ? {
-      ssl: true,
-      tlsAllowInvalidCertificates: true,
-      tlsAllowInvalidHostnames: true
-    } : {})
+    // Common options for all environments
+    serverSelectionTimeoutMS: 30000, // 30 seconds
+    socketTimeoutMS: 45000, // 45 seconds
   };
+
+  // Only set SSL/TLS options for Atlas connections
+  if (isAtlas) {
+    return {
+      ...options,
+      ssl: true,
+      sslValidate: true,
+      tls: true,
+      tlsInsecure: false,
+      tlsAllowInvalidCertificates: false,
+      tlsAllowInvalidHostnames: false,
+      // For MongoDB Node.js Driver v4.0.0 and later
+      connectTimeoutMS: 30000,
+      heartbeatFrequencyMS: 10000,
+      retryWrites: true,
+      w: 'majority'
+    };
+  }
+  
+  return options;
 };
 
 // Handle MongoDB connection events
