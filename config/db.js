@@ -89,17 +89,18 @@ const configureMongoOptions = () => {
   if (isAtlas) {
     return {
       ...options,
-      ssl: true,
-      sslValidate: true,
+      // Use either tls or ssl, not both
       tls: true,
-      tlsInsecure: false,
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
-      // For MongoDB Node.js Driver v4.0.0 and later
+      // Connection settings
       connectTimeoutMS: 30000,
       heartbeatFrequencyMS: 10000,
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      // Use new URL parser and unified topology
+      useNewUrlParser: true,
+      useUnifiedTopology: true
     };
   }
   
