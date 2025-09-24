@@ -61,6 +61,10 @@ if (missingVars.length > 0) {
 // Initialize express app
 const app = express();
 
+// Increase request size limit to 10MB
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
+
 // Create HTTP server with keep-alive settings
 const httpServer = createServer(app);
 
