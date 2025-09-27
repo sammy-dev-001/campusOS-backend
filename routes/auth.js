@@ -189,14 +189,20 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       console.log('No user found with email:', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ 
+        message: 'No account found with this email address',
+        errorType: 'email'
+      });
     }
 
     // Check password using the correct method signature
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       console.log('Password mismatch for user:', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ 
+        message: 'Incorrect password',
+        errorType: 'password'
+      });
     }
 
     // Generate JWT token

@@ -159,25 +159,73 @@ router.get('/:id/posts', auth, async (req, res) => {
 // Search users
 router.get('/search', auth, async (req, res) => {
   try {
+    console.log('Search query received:', req.query);
     const { q } = req.query;
     
     if (!q) {
+      console.log('No search query provided');
       return res.status(400).json({ message: 'Search query is required' });
     }
     
-    const users = await User.find({
+    console.log('Searching for users with query:', q);
+    
+    // First verify the user making the request exists and is valid
+    const requestingUser = await User.findById(req.user.id);
+    if (!requestingUser) {
+      console.error('Requesting user not found:', req.user.id);
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Build the search query
+    const searchQuery = {
       $or: [
         { username: { $regex: q, $options: 'i' } },
         { email: { $regex: q, $options: 'i' } },
         { displayName: { $regex: q, $options: 'i' } }
       ],
       _id: { $ne: req.user.id } // Exclude current user
-    }).select('username profilePic displayName');
+    };
     
-    res.json(users);
+    console.log('Executing search with query:', JSON.stringify(searchQuery, null, 2));
+    
+    const users = await User.find(searchQuery)
+      .select('username profilePic displayName email')
+      .limit(20) // Limit results to prevent performance issues
+      .lean(); // Convert to plain JavaScript objects
+    
+    console.log(`Found ${users.length} users matching query`);
+    
+    // Sanitize user data before sending
+    const sanitizedUsers = users.map(user => ({
+      id: user._id,
+      username: user.username,
+      displayName: user.displayName || user.username,
+      email: user.email,
+      profilePicture: user.profilePic
+    }));
+    
+    res.json(sanitizedUsers);
+    
   } catch (error) {
-    console.error('Error searching users:', error);
-    res.status(500).json({ message: 'Error searching users' });
+    console.error('Error searching users:', {
+      message: error.message,
+      stack: error.stack,
+      query: req.query,
+      user: req.user
+    });
+    
+    // More specific error handling
+    if (error.name === 'CastError') {
+      return res.status(400).json({ 
+        message: 'Invalid search parameters',
+        details: error.message 
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Error searching users',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
