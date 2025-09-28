@@ -18,9 +18,161 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// Search users
+router.get('/search', auth, async (req, res) => {
+  // Log the start of the search request
+  console.log('[Search] Starting user search with query:', req.query);
+  
+  try {
+    // Validate input
+    const { q } = req.query;
+    
+    if (!q || typeof q !== 'string') {
+      console.log('[Search] Invalid or missing search query');
+      return res.status(400).json({ 
+        success: false,
+        message: 'A valid search query is required',
+        code: 'INVALID_QUERY'
+      });
+    }
+    
+    const searchTerm = q.trim();
+    if (searchTerm.length < 2) {
+      console.log('[Search] Search term too short');
+      return res.status(400).json({
+        success: false,
+        message: 'Search term must be at least 2 characters long',
+        code: 'QUERY_TOO_SHORT'
+      });
+    }
+    
+    console.log(`[Search] Validated search term: "${searchTerm}"`);
+    
+    // Verify the requesting user exists and is valid
+    try {
+      const requestingUser = await User.findById(req.user.id).select('_id').lean();
+      if (!requestingUser) {
+        console.error(`[Search] Requesting user not found: ${req.user.id}`);
+        return res.status(404).json({ 
+          success: false,
+          message: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+    } catch (userError) {
+      console.error('[Search] Error validating requesting user:', {
+        error: userError.message,
+        stack: userError.stack,
+        userId: req.user.id
+      });
+      
+      return res.status(500).json({ 
+        success: false,
+        message: 'Error validating user session',
+        code: 'SESSION_VALIDATION_ERROR',
+        error: process.env.NODE_ENV === 'development' ? userError.message : undefined
+      });
+    }
+    
+    // Build a safe search query
+    const searchQuery = {
+      $and: [
+        {
+          $or: [
+            { username: { $regex: searchTerm, $options: 'i' } },
+            { email: { $regex: searchTerm, $options: 'i' } },
+            { displayName: { $regex: searchTerm, $options: 'i' } }
+          ]
+        },
+        { _id: { $ne: req.user.id } } // Exclude current user
+      ]
+    };
+    
+    console.log('[Search] Executing database query:', JSON.stringify({
+      query: searchQuery,
+      userId: req.user.id
+    }, null, 2));
+    
+    // Execute search with error handling
+    let users;
+    try {
+      users = await User.find(searchQuery)
+        .select('_id username profilePic displayName email')
+        .limit(20)
+        .lean();
+        
+      console.log(`[Search] Found ${users.length} matching users`);
+      
+    } catch (dbError) {
+      console.error('[Search] Database query failed:', {
+        error: dbError.message,
+        stack: dbError.stack,
+        query: searchQuery
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Error searching users',
+        code: 'DATABASE_ERROR',
+        error: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+      });
+    }
+    
+    // Sanitize and format response
+    const sanitizedUsers = users.map(user => ({
+      id: user._id,
+      username: user.username,
+      displayName: user.displayName || user.username,
+      email: user.email,
+      profilePicture: user.profilePic
+    }));
+    
+    console.log('[Search] Search completed successfully');
+    
+    return res.json({
+      success: true,
+      count: sanitizedUsers.length,
+      results: sanitizedUsers
+    });
+    
+  } catch (error) {
+    // Catch any unexpected errors
+    console.error('[Search] Unexpected error:', {
+      message: error.message,
+      stack: error.stack,
+      query: req.query,
+      userId: req.user?.id,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Handle specific error types
+    if (error.name === 'CastError') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid search parameters',
+        code: 'INVALID_PARAMETERS',
+        details: error.message 
+      });
+    }
+    
+    // Default error response
+    return res.status(500).json({
+      success: false,
+      message: 'An unexpected error occurred while searching',
+      code: 'INTERNAL_SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // Get user profile by ID or username
 router.get('/:id', auth, async (req, res) => {
   try {
+    // Skip if the ID is 'search' to prevent conflict with the search endpoint
+    if (req.params.id === 'search') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+    
     const user = await User.findOne({
       $or: [
         { _id: req.params.id },
@@ -156,78 +308,6 @@ router.get('/:id/posts', auth, async (req, res) => {
   }
 });
 
-// Search users
-router.get('/search', auth, async (req, res) => {
-  try {
-    console.log('Search query received:', req.query);
-    const { q } = req.query;
-    
-    if (!q) {
-      console.log('No search query provided');
-      return res.status(400).json({ message: 'Search query is required' });
-    }
-    
-    console.log('Searching for users with query:', q);
-    
-    // First verify the user making the request exists and is valid
-    const requestingUser = await User.findById(req.user.id);
-    if (!requestingUser) {
-      console.error('Requesting user not found:', req.user.id);
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    // Build the search query
-    const searchQuery = {
-      $or: [
-        { username: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } },
-        { displayName: { $regex: q, $options: 'i' } }
-      ],
-      _id: { $ne: req.user.id } // Exclude current user
-    };
-    
-    console.log('Executing search with query:', JSON.stringify(searchQuery, null, 2));
-    
-    const users = await User.find(searchQuery)
-      .select('username profilePic displayName email')
-      .limit(20) // Limit results to prevent performance issues
-      .lean(); // Convert to plain JavaScript objects
-    
-    console.log(`Found ${users.length} users matching query`);
-    
-    // Sanitize user data before sending
-    const sanitizedUsers = users.map(user => ({
-      id: user._id,
-      username: user.username,
-      displayName: user.displayName || user.username,
-      email: user.email,
-      profilePicture: user.profilePic
-    }));
-    
-    res.json(sanitizedUsers);
-    
-  } catch (error) {
-    console.error('Error searching users:', {
-      message: error.message,
-      stack: error.stack,
-      query: req.query,
-      user: req.user
-    });
-    
-    // More specific error handling
-    if (error.name === 'CastError') {
-      return res.status(400).json({ 
-        message: 'Invalid search parameters',
-        details: error.message 
-      });
-    }
-    
-    res.status(500).json({ 
-      message: 'Error searching users',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
 
 // Follow/Unfollow user
 router.post('/:id/follow', auth, async (req, res) => {
