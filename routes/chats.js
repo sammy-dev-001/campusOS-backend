@@ -22,8 +22,24 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
+    // Format participants as objects with required fields
+    const formattedParticipants = [
+      {
+        user: req.user.id,
+        lastRead: new Date(),
+        unreadCount: 0,
+        isAdmin: isGroupChat
+      },
+      ...participants.map(participant => ({
+        user: participant,
+        lastRead: new Date(),
+        unreadCount: 0,
+        isAdmin: false
+      }))
+    ];
+
     const chat = new Chat({
-      participants: [req.user.id, ...participants],
+      participants: formattedParticipants,
       isGroupChat: isGroupChat || false,
       name: isGroupChat ? name : null,
       groupImage: isGroupChat ? groupImage : null,
