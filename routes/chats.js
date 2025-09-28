@@ -8,7 +8,21 @@ const router = express.Router();
 // Create a new chat
 router.post('/', auth, async (req, res) => {
   try {
-    const { participants, isGroupChat, name, groupImage } = req.body;
+    const { participants: participantsInput, isGroupChat, name, groupImage } = req.body;
+    
+    // Validate participants
+    if (!Array.isArray(participantsInput)) {
+      return res.status(400).json({ message: 'Participants must be an array' });
+    }
+    
+    // Filter out any invalid participant IDs
+    const participants = participantsInput.filter(id => 
+      id && (typeof id === 'string' || typeof id === 'object' && id !== null)
+    );
+    
+    if (participants.length === 0) {
+      return res.status(400).json({ message: 'At least one valid participant is required' });
+    }
     
     // For one-on-one chat, check if chat already exists
     if (!isGroupChat && participants.length === 1) {
