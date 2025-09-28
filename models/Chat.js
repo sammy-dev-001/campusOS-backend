@@ -73,7 +73,20 @@ chatSchema.index({ 'participants': 1, 'updatedAt': -1 });
 
 // Virtual for unread message count
 chatSchema.virtual('unreadCount').get(function() {
-  return this.messages.filter(msg => !msg.readBy.includes(this.currentUser)).length;
+  if (!this.messages || !Array.isArray(this.messages)) {
+    return 0;
+  }
+  
+  // If currentUser is not available, return 0
+  if (!this.currentUser) {
+    return 0;
+  }
+  
+  return this.messages.filter(msg => 
+    msg && 
+    Array.isArray(msg.readBy) && 
+    !msg.readBy.includes(this.currentUser)
+  ).length;
 });
 
 // Pre-remove hook to delete group image from Cloudinary
