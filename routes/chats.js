@@ -112,28 +112,68 @@ router.get('/', auth, async (req, res) => {
 // Get a single chat
 router.get('/:id', auth, async (req, res) => {
   try {
-    const chat = await Chat.findOne({
-      _id: req.params.id,
-      participants: req.user.id
-    })
-      .populate('participants', 'username profilePic')
-      .populate({
-        path: 'messages',
-        populate: {
-          path: 'sender',
-          select: 'username profilePic'
-        },
-        options: { sort: { createdAt: -1 }, limit: 50 }
+    const chatId = req.params.id;
+    const userId = req.user.id;
+    
+    // Validate chat ID format
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ 
+        status: 'fail',
+        message: 'Invalid chat ID format' 
       });
-      
-    if (!chat) {
-      return res.status(404).json({ message: 'Chat not found' });
     }
     
-    res.json(chat);
+    // Convert user ID to ObjectId
+    const userIdObj = new mongoose.Types.ObjectId(userId);
+    
+    // Find chat by ID and check if user is a participant
+    const chat = await Chat.findOne({
+      _id: new mongoose.Types.ObjectId(chatId),
+      'participants.user': userIdObj
+    })
+    .populate({
+      path: 'participants.user',
+      select: 'username profilePic'
+    })
+    .populate({
+      path: 'lastMessage',
+      populate: {
+        path: 'sender',
+        select: 'username profilePic'
+      }
+    })
+    .populate({
+      path: 'messages',
+      options: { 
+        sort: { createdAt: -1 }, 
+        limit: 50 
+      },
+      populate: {
+        path: 'sender',
+        select: 'username profilePic'
+      }
+    })
+    .lean(); // Convert to plain JavaScript object
+    
+    if (!chat) {
+      return res.status(404).json({ 
+        status: 'fail',
+        message: 'Chat not found or you do not have permission to view this chat' 
+      });
+    }
+    
+    // Convert to plain object and add virtuals
+    const chatObj = chat;
+    chatObj.id = chat._id.toString();
+    
+    res.json(chatObj);
   } catch (error) {
     console.error('Error fetching chat:', error);
-    res.status(500).json({ message: 'Error fetching chat' });
+    res.status(500).json({ 
+      status: 'error',
+      message: 'Error fetching chat',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
