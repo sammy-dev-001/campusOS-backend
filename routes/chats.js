@@ -142,18 +142,7 @@ router.get('/:id', auth, async (req, res) => {
         select: 'username profilePic'
       }
     })
-    .populate({
-      path: 'messages',
-      options: { 
-        sort: { createdAt: -1 }, 
-        limit: 50 
-      },
-      populate: {
-        path: 'sender',
-        select: 'username profilePic'
-      }
-    })
-    .lean(); // Convert to plain JavaScript object
+    .lean();
     
     if (!chat) {
       return res.status(404).json({ 
@@ -162,9 +151,20 @@ router.get('/:id', auth, async (req, res) => {
       });
     }
     
+    // Get messages separately
+    const Message = mongoose.model('Message');
+    const messages = await Message.find({ chat: chat._id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .populate('sender', 'username profilePic')
+      .lean();
+    
     // Convert to plain object and add virtuals
-    const chatObj = chat;
-    chatObj.id = chat._id.toString();
+    const chatObj = {
+      ...chat,
+      id: chat._id.toString(),
+      messages: messages.reverse() // Reverse to show oldest first
+    };
     
     res.json(chatObj);
   } catch (error) {
