@@ -312,29 +312,29 @@ router.post('/:id/comments', auth, async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
     
-    const comment = {
+    // Create a new comment using the Comment model
+    const comment = new Comment({
       content,
       author: req.user.id,
-      createdAt: new Date()
-    };
+      post: post._id
+    });
     
-    post.comments.unshift(comment);
+    // Save the comment
+    await comment.save();
+    
+    // Add comment to post's comments array
+    post.comments.push(comment._id);
     await post.save();
     
     // Populate author info in the response
-    const populatedComment = {
-      ...comment._doc,
-      author: {
-        _id: req.user.id,
-        username: req.user.username,
-        profilePic: req.user.profilePic
-      }
-    };
+    const populatedComment = await Comment.findById(comment._id)
+      .populate('author', 'username profilePic')
+      .lean();
     
     res.status(201).json(populatedComment);
   } catch (error) {
     console.error('Error adding comment:', error);
-    res.status(500).json({ message: 'Error adding comment' });
+    res.status(500).json({ message: 'Error adding comment', error: error.message });
   }
 });
 
