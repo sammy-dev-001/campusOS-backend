@@ -175,6 +175,8 @@ const io = new Server(httpServer, {
 // Initialize WebSocket service
 const webSocketService = new WebSocketService(io);
 app.set('webSocketService', webSocketService);
+// Also expose globally so backend services can access the io instance if needed
+global.__webSocketService = webSocketService;
 
 // Configure Cloudinary with enhanced error handling
 const configureCloudinary = () => {

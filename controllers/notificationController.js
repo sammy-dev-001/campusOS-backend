@@ -118,7 +118,13 @@ export const clearAllNotifications = async (req, res, next) => {
     await Notification.deleteMany({ user: req.user.id });
     
     // Notify the user that all notifications were cleared
-    req.app.get('io').to(`user_${req.user.id}`).emit('notifications:cleared');
+    const webSocketService = req.app.get('webSocketService');
+    const io = webSocketService && webSocketService.io ? webSocketService.io : null;
+    if (io) {
+      io.to(`user_${req.user.id}`).emit('notifications:cleared');
+    } else {
+      console.warn('[NotificationController] No io instance available to emit notifications:cleared');
+    }
     
     res.status(204).json({
       status: 'success',

@@ -1,5 +1,9 @@
 import Notification from '../models/Notification.js';
-import { io } from '../server.js';
+
+function getIo() {
+  if (global && global.__webSocketService && global.__webSocketService.io) return global.__webSocketService.io;
+  return null;
+}
 
 class NotificationService {
   /**
@@ -14,8 +18,9 @@ class NotificationService {
       ...notificationData
     });
 
-    // Emit to the specific user's room
-    io.to(`user_${userId}`).emit('notification', notification);
+  // Emit to the specific user's room (if io available)
+  const io = getIo();
+  if (io) io.to(`user_${userId}`).emit('notification', notification);
     
     return notification;
   }
@@ -33,12 +38,15 @@ class NotificationService {
     );
 
     // Emit to each user's room
-    userIds.forEach(userId => {
-      io.to(`user_${userId}`).emit('notification', {
-        ...notificationData,
-        user: { _id: userId }
+    const io = getIo();
+    if (io) {
+      userIds.forEach(userId => {
+        io.to(`user_${userId}`).emit('notification', {
+          ...notificationData,
+          user: { _id: userId }
+        });
       });
-    });
+    }
 
     return notifications;
   }
@@ -51,8 +59,9 @@ class NotificationService {
   static async markAllAsRead(userId) {
     const result = await Notification.markAllAsRead(userId);
     
-    // Notify the user that notifications were marked as read
-    io.to(`user_${userId}`).emit('notifications:read');
+  // Notify the user that notifications were marked as read
+  const io2 = getIo();
+  if (io2) io2.to(`user_${userId}`).emit('notifications:read');
     
     return result;
   }
@@ -75,8 +84,9 @@ class NotificationService {
 
     await notification.markAsRead();
     
-    // Notify the user that a notification was marked as read
-    io.to(`user_${userId}`).emit('notification:read', { _id: notificationId });
+  // Notify the user that a notification was marked as read
+  const io3 = getIo();
+  if (io3) io3.to(`user_${userId}`).emit('notification:read', { _id: notificationId });
     
     return notification;
   }
@@ -138,8 +148,9 @@ class NotificationService {
       throw new Error('Notification not found');
     }
 
-    // Notify the user that a notification was deleted
-    io.to(`user_${userId}`).emit('notification:deleted', { _id: notificationId });
+  // Notify the user that a notification was deleted
+  const io4 = getIo();
+  if (io4) io4.to(`user_${userId}`).emit('notification:deleted', { _id: notificationId });
     
     return notification;
   }

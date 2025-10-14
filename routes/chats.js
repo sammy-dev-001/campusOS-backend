@@ -253,14 +253,26 @@ router.post('/:id/messages', auth, async (req, res) => {
     });
 
     console.log('[POST /:id/messages] Emitting newMessage to participants:', participantsList);
-    participantsList.forEach(participantUserId => {
-      if (participantUserId && participantUserId !== req.user.id) {
-        req.app.get('io').to(participantUserId).emit('newMessage', {
-          chatId: req.params.id,
-          message: populatedMessage
-        });
-      }
-    });
+    const webSocketService = req.app.get('webSocketService');
+    const io = webSocketService && webSocketService.io ? webSocketService.io : null;
+    if (io) {
+      participantsList.forEach(participantUserId => {
+        try {
+          if (participantUserId && participantUserId !== req.user.id) {
+            // Emit to the user's personal room if available; fall back to direct room by id
+            const room = `user_${participantUserId}`;
+            io.to(room).emit('newMessage', {
+              chatId: req.params.id,
+              message: populatedMessage
+            });
+          }
+        } catch (emitErr) {
+          console.warn('[POST /:id/messages] emit error for participant', participantUserId, emitErr);
+        }
+      });
+    } else {
+      console.warn('[POST /:id/messages] No io instance available on app to emit messages');
+    }
 
     res.status(201).json(populatedMessage);
   } catch (error) {
