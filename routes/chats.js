@@ -142,7 +142,7 @@ router.get('/:id', auth, async (req, res) => {
     .populate({
       path: 'lastMessage',
       populate: {
-        path: 'sender',
+        path: 'senderId',
         select: 'username profilePic'
       }
     })
@@ -157,10 +157,10 @@ router.get('/:id', auth, async (req, res) => {
     
     // Get messages separately
     const Message = mongoose.model('Message');
-    const messages = await Message.find({ chat: chat._id })
+    const messages = await Message.find({ chatId: chat._id })
       .sort({ createdAt: -1 })
       .limit(50)
-      .populate('sender', 'username profilePic')
+      .populate('senderId', 'username profilePic')
       .lean();
     
     // Convert to plain object and add virtuals

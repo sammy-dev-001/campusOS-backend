@@ -1,42 +1,42 @@
+import { v2 as cloudinary } from 'cloudinary';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import { v2 as cloudinary } from 'cloudinary';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 import hpp from 'hpp';
+import { createServer } from 'http';
+import mongoose from 'mongoose';
+import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import path from 'path';
+import { Server } from 'socket.io';
+import { fileURLToPath } from 'url';
 import xss from 'xss-clean';
-import cookieParser from 'cookie-parser';
-import compression from 'compression';
-import { WebSocketService } from './services/websocket.js';
 import { connectDB } from './config/db.js';
 import globalErrorHandler from './middleware/errorHandler.js';
+import { WebSocketService } from './services/websocket.js';
 import AppError from './utils/appError.js';
 
 // Import models - This ensures models are registered with Mongoose
-import './models/User.js';
-import './models/Post.js';
 import './models/Chat.js';
+import './models/Post.js';
+import './models/User.js';
 
 // Import routes
-import authRoutes from './routes/auth.js';
-import postRoutes from './routes/posts.js';
-import chatRoutes from './routes/chats.js';
-import userRoutes from './routes/users.js';
 import announcementRoutes from './routes/announcementRoutes.js';
-import tutorRoutes from './routes/tutorRoutes.js';
-import timetableRoutes from './routes/timetableRoutes.js';
-import pollRoutes from './routes/polls.js';
-import healthRoutes from './routes/health.js';
+import authRoutes from './routes/auth.js';
+import chatRoutes from './routes/chats.js';
 import documentRoutes from './routes/documentRoutes.js';
+import healthRoutes from './routes/health.js';
+import pollRoutes from './routes/polls.js';
+import postRoutes from './routes/posts.js';
+import timetableRoutes from './routes/timetableRoutes.js';
+import tutorRoutes from './routes/tutorRoutes.js';
+import userRoutes from './routes/users.js';
 
 // Get the current file and directory names
 const __filename = fileURLToPath(import.meta.url);
@@ -678,3 +678,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export { app, httpServer, webSocketService };
+
