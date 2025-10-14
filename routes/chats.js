@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import { auth } from '../middleware/auth.js';
-import { Chat, User } from '../models/index.js';
+import { Chat } from '../models/index.js';
 
 const router = express.Router();
 
@@ -26,10 +26,14 @@ router.post('/', auth, async (req, res) => {
     
     // For one-on-one chat, check if chat already exists
     if (!isGroupChat && participants.length === 1) {
+      // For one-on-one chats, find a chat that contains both users in the participants.user subdocument
       const existingChat = await Chat.findOne({
         isGroupChat: false,
-        participants: { $all: [req.user.id, participants[0]] }
-      }).populate('participants', 'username profilePic');
+        $and: [
+          { 'participants.user': req.user.id },
+          { 'participants.user': participants[0] }
+        ]
+      }).populate('participants.user', 'username profilePic');
       
       if (existingChat) {
         return res.json(existingChat);
@@ -60,10 +64,10 @@ router.post('/', auth, async (req, res) => {
       groupAdmin: isGroupChat ? req.user.id : null
     });
 
-    await chat.save();
+  await chat.save();
     
-    // Populate participants before sending response
-    await chat.populate('participants', 'username profilePic');
+  // Populate participants before sending response (populate the nested user field)
+  await chat.populate('participants.user', 'username profilePic');
     
     res.status(201).json(chat);
   } catch (error) {
@@ -181,11 +185,21 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/:id/messages', auth, async (req, res) => {
   try {
     const { content, media } = req.body;
+    // Structured debug logs to capture incoming payload and context
+    console.log('[POST /:id/messages] Incoming payload:', {
+      params: req.params,
+      body: req.body,
+      user: { id: req.user?.id, username: req.user?.username }
+    });
     
     const chat = await Chat.findOne({
       _id: req.params.id,
-      participants: req.user.id
-    });
+      // participants is an array of subdocuments { user: ObjectId, ... }
+      // query by the nested user field to avoid casting errors
+      'participants.user': req.user.id
+    }).lean();
+
+    console.log('[POST /:id/messages] Resolved chat (lean):', chat ? { id: chat._id, participants: chat.participants } : null);
     
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' });
@@ -197,10 +211,20 @@ router.post('/:id/messages', auth, async (req, res) => {
       media: media || [],
       readBy: [req.user.id]
     };
+
+    console.log('[POST /:id/messages] Constructed message object (pre-save):', message);
     
-    chat.messages.push(message);
-    chat.lastMessage = message;
-    await chat.save();
+    // If chat was returned as lean() above, re-fetch as model to allow modifications
+    let chatModel = chat;
+    if (chat && chat._id) {
+      chatModel = await Chat.findById(req.params.id);
+    }
+    if (!chatModel) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+    chatModel.messages.push(message);
+    chatModel.lastMessage = message;
+    await chatModel.save();
     
     // Populate sender info before sending response
     const populatedMessage = {
@@ -212,11 +236,17 @@ router.post('/:id/messages', auth, async (req, res) => {
       }
     };
     
-    // Emit new message to all participants
-    chat.participants.forEach(participantId => {
-      if (participantId.toString() !== req.user.id) {
-        req.app.get('io').to(participantId.toString()).emit('newMessage', {
-          chatId: chat._id,
+    // Emit new message to all participants (use participant.user)
+    const participantsList = (chatModel.participants || []).map(p => {
+      // participants are subdocuments with a .user field
+      if (p && (p.user || p.user === 0)) return String(p.user);
+      return String(p);
+    });
+    console.log('[POST /:id/messages] Emitting newMessage to participants:', participantsList);
+    participantsList.forEach(participantUserId => {
+      if (participantUserId && participantUserId !== req.user.id) {
+        req.app.get('io').to(participantUserId).emit('newMessage', {
+          chatId: chatModel._id,
           message: populatedMessage
         });
       }
@@ -234,7 +264,7 @@ router.post('/:id/read', auth, async (req, res) => {
   try {
     const chat = await Chat.findOne({
       _id: req.params.id,
-      participants: req.user.id
+      'participants.user': req.user.id
     });
     
     if (!chat) {
@@ -300,25 +330,32 @@ router.post('/:id/participants', auth, async (req, res) => {
     }
     
     if (action === 'add') {
-      // Check if user is already a participant
-      if (chat.participants.includes(userId)) {
+      // Check if user is already a participant (compare nested .user field)
+      if (chat.participants.some(p => String(p.user) === String(userId))) {
         return res.status(400).json({ message: 'User is already in the group' });
       }
-      chat.participants.push(userId);
+      // Push a properly-shaped participant subdocument so Mongoose doesn't try to cast a string into a subdoc
+      chat.participants.push({
+        user: userId,
+        lastRead: new Date(),
+        unreadCount: 0,
+        isAdmin: false
+      });
     } else if (action === 'remove') {
       // Don't allow removing the admin
-      if (userId === chat.groupAdmin.toString()) {
+      if (userId === String(chat.groupAdmin)) {
         return res.status(400).json({ message: 'Cannot remove group admin' });
       }
+      // Remove participant subdocument by matching the nested .user id
       chat.participants = chat.participants.filter(
-        participant => participant.toString() !== userId
+        participant => String(participant.user) !== String(userId)
       );
     }
     
     await chat.save();
     
-    // Populate participants before sending response
-    await chat.populate('participants', 'username profilePic');
+  // Populate participants before sending response (populate the nested user field)
+  await chat.populate('participants.user', 'username profilePic');
     
     res.json(chat);
   } catch (error) {

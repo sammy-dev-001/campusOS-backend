@@ -1,7 +1,7 @@
-import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { Server } from 'socket.io';
 import Chat from '../models/Chat.js';
+import User from '../models/User.js';
 import WebSocketEvents from './websocketEvents.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -129,7 +129,8 @@ export class WebSocketService {
           }
 
           // Check if user is a participant
-          if (!chat.participants.some(p => p.toString() === userId.toString())) {
+          // participants are subdocuments with a .user field
+          if (!chat.participants.some(p => String(p.user) === String(userId))) {
             return socket.emit('error', { message: 'Not authorized to send messages in this chat' });
           }
 
@@ -177,7 +178,7 @@ export class WebSocketService {
         try {
           const chat = await Chat.findById(chatId);
           
-          if (!chat || !chat.participants.some(p => p.toString() === userId.toString())) {
+          if (!chat || !chat.participants.some(p => String(p.user) === String(userId))) {
             return;
           }
 
