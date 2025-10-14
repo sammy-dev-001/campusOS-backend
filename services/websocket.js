@@ -142,29 +142,37 @@ export class WebSocketService {
             readBy: [userId]
           };
 
-          // Add message to chat
-          chat.messages.push(message);
-          chat.lastMessage = message;
-          await chat.save();
-
-          // Populate sender info for the response
-          const populatedMessage = {
-            ...message,
-            sender: {
-              _id: userId,
-              username,
-              profilePic
-            },
-            createdAt: new Date()
-          };
-
-          // Emit to all participants
-          this.io.to(`chat_${chatId}`).emit('new_message', {
+          // Persist message as a Message document
+          const Message = mongoose.model('Message');
+          const messageDoc = new Message({
             chatId,
-            message: populatedMessage
+            senderId: userId,
+            content,
+            type: 'text',
+            mediaUrl: (media && Array.isArray(media) && media.length > 0) ? media[0] : undefined,
+            readBy: [userId]
           });
 
-          // Update last message in participants' chat lists
+          await messageDoc.save();
+
+          // Update chat's lastMessage
+          await Chat.findByIdAndUpdate(chatId, { lastMessage: messageDoc._id, updatedAt: new Date() });
+
+          // Build populated message for emit
+          const populatedMessage = {
+            id: messageDoc._id.toString(),
+            chatId,
+            content: messageDoc.content,
+            type: messageDoc.type,
+            mediaUrl: messageDoc.mediaUrl,
+            createdAt: messageDoc.createdAt,
+            readBy: messageDoc.readBy.map(String),
+            sender: { _id: userId, username, profilePic },
+            senderId: String(userId)
+          };
+
+          // Emit to chat room and update participant lists
+          this.io.to(`chat_${chatId}`).emit('new_message', { chatId, message: populatedMessage });
           this.notifyChatUpdate(chat);
 
         } catch (error) {
