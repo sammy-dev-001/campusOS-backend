@@ -1,11 +1,13 @@
-import express from 'express';
-import { auth } from '../middleware/auth.js';
-import User from '../models/User.js';
-import Post from '../models/Post.js';
 import bcrypt from 'bcryptjs';
 import { v2 as cloudinary } from 'cloudinary';
+import { Expo } from 'expo-server-sdk';
+import express from 'express';
+import { auth } from '../middleware/auth.js';
+import Post from '../models/Post.js';
+import User from '../models/User.js';
 
 const router = express.Router();
+const expo = new Expo();
 
 // Get current user profile
 router.get('/me', auth, async (req, res) => {
@@ -390,6 +392,54 @@ router.get('/:id/following', auth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching following:', error);
     res.status(500).json({ message: 'Error fetching following' });
+  }
+});
+
+// Update user's push token
+router.post('/:userId/push-token', auth, async (req, res) => {
+  try {
+    const { pushToken } = req.body;
+    
+    if (!pushToken) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Push token is required' 
+      });
+    }
+
+    // Validate the push token format
+    if (!Expo.isExpoPushToken(pushToken)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid push token format' 
+      });
+    }
+
+    // Update the user's push token
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { pushToken },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Push token updated successfully' 
+    });
+  } catch (error) {
+    console.error('Error updating push token:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error updating push token',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

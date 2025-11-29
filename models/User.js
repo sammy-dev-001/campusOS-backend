@@ -1,6 +1,6 @@
-import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 // Define schema without any virtuals first
 const userSchemaDefinition = {
@@ -50,6 +50,11 @@ const userSchemaDefinition = {
     required: [true, 'Full name is required'],
     minlength: [2, 'Full name must be at least 2 characters'],
     maxlength: [100, 'Full name cannot exceed 100 characters']
+  },
+  pushToken: {
+    type: String,
+    default: null,
+    select: false
   },
   // ... (rest of the schema fields remain the same)
   // [Previous schema fields continue...]
