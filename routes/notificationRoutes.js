@@ -1,18 +1,34 @@
 import express from 'express';
-import { protect } from '../middleware/auth.js';
 import {
-  getMyNotifications,
-  getUnreadCount,
-  markAsRead,
-  markAllAsRead,
+  clearAllNotifications,
   deleteNotification,
-  clearAllNotifications
+  getMyNotifications,
+  getNotificationPreferences,
+  getUnreadCount,
+  markAllAsRead,
+  markAsRead,
+  registerPushToken,
+  removePushToken,
+  testPushNotification,
+  updateNotificationPreferences
 } from '../controllers/notificationController.js';
+import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Protect all routes after this middleware
 router.use(protect);
+
+// Push token management
+router.post('/register-push-token', registerPushToken);
+router.delete('/push-token', removePushToken);
+
+// Notification preferences
+router.get('/preferences', getNotificationPreferences);
+router.put('/preferences', updateNotificationPreferences);
+
+// Test notification (for debugging)
+router.post('/test', testPushNotification);
 
 // Get all notifications for the current user
 router.get('/', getMyNotifications);
@@ -33,3 +49,4 @@ router.delete('/:id', deleteNotification);
 router.delete('/', clearAllNotifications);
 
 export default router;
+

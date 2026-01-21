@@ -27,13 +27,16 @@ import './models/Post.js';
 import './models/User.js';
 
 // Import routes
+import aiRoutes from './routes/aiRoutes.js';
 import announcementRoutes from './routes/announcementRoutes.js';
 import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chats.js';
 import documentRoutes from './routes/documentRoutes.js';
 import healthRoutes from './routes/health.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import pollRoutes from './routes/polls.js';
 import postRoutes from './routes/posts.js';
+import studyBuddyRoutes from './routes/studyBuddyRoutes.js';
 import timetableRoutes from './routes/timetableRoutes.js';
 import tutorRoutes from './routes/tutorRoutes.js';
 import userRoutes from './routes/users.js';
@@ -220,7 +223,7 @@ const createCloudinaryStorage = (folder, resourceType = 'auto') => {
       const originalName = file.originalname.split('.');
       const extension = originalName[originalName.length - 1];
       const filename = `${originalName[0].substring(0, 100)}-${uniqueSuffix}.${extension}`;
-      
+
       return {
         folder: `campusOS/${folder}`,
         public_id: filename,
@@ -276,9 +279,9 @@ const postUpload = multer({
 const documentUpload = multer({
   storage: createCloudinaryStorage('documents', 'raw'),
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('application/pdf') || 
-        file.mimetype.includes('document') || 
-        file.mimetype.includes('text')) {
+    if (file.mimetype.startsWith('application/pdf') ||
+      file.mimetype.includes('document') ||
+      file.mimetype.includes('text')) {
       cb(null, true);
     } else {
       cb(new AppError('Not a supported document format!', 400), false);
@@ -320,8 +323,8 @@ app.get(['/health', `${API_PREFIX}/health`], (req, res) => {
     documentation: 'https://github.com/sammy-dev-001/campusOS-backend',
     database: {
       status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-      url: process.env.MONGODB_URI ? 
-           process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured'
+      url: process.env.MONGODB_URI ?
+        process.env.MONGODB_URI.replace(/\/.*@/, '/***@') : 'not configured'
     },
     services: {
       cloudinary: !!cloudinary.config().cloud_name,
@@ -338,7 +341,7 @@ app.get(['/health', `${API_PREFIX}/health`], (req, res) => {
     platform: process.platform,
     arch: process.arch
   };
-  
+
   res.status(isHealthy ? 200 : 503).json(healthCheck);
 });
 
@@ -358,6 +361,10 @@ app.use(`${API_PREFIX}/timetables`, timetableRoutes);
 app.use(`${API_PREFIX}/polls`, pollRoutes);
 app.use(`${API_PREFIX}/documents`, documentRoutes);
 app.use(`${API_PREFIX}/health`, healthRoutes);
+app.use(`${API_PREFIX}/notifications`, notificationRoutes);
+app.use(`${API_PREFIX}/study-buddy`, studyBuddyRoutes);
+app.use(`${API_PREFIX}/ai`, aiRoutes);
+app.use(`${API_PREFIX}/sessions`, sessionRoutes);
 
 // Mount non-versioned API routes for backward compatibility
 app.use('/api/auth', authRoutes);
@@ -370,6 +377,10 @@ app.use('/api/timetables', timetableRoutes);
 app.use('/api/polls', pollRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/study-buddy', studyBuddyRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/sessions', sessionRoutes);
 
 // Legacy health check redirect
 app.get('/health', (req, res) => {
@@ -428,7 +439,7 @@ app.use(globalErrorHandler);
 const serverState = {
   isShuttingDown: false,
   activeConnections: new Set(),
-  
+
   // Track active connections
   trackConnections(server) {
     server.on('connection', (connection) => {
@@ -438,7 +449,7 @@ const serverState = {
       });
     });
   },
-  
+
   // Close all active connections
   closeConnections() {
     console.log('Closing all active connections...');
@@ -447,36 +458,36 @@ const serverState = {
       this.activeConnections.delete(connection);
     });
   },
-  
+
   // Graceful shutdown handler
   async gracefulShutdown() {
     if (this.isShuttingDown) return;
     this.isShuttingDown = true;
-    
+
     console.log('Shutting down gracefully...');
-    
+
     try {
       // Close HTTP server
       await new Promise((resolve) => httpServer.close(() => {
         console.log('HTTP server closed');
         resolve();
       }));
-      
+
       // Close MongoDB connection
       if (mongoose.connection.readyState === 1) {
         await mongoose.connection.close(false);
         console.log('MongoDB connection closed');
       }
-      
+
       // Close WebSocket connections
       if (webSocketService) {
         webSocketService.io.close();
         console.log('WebSocket server closed');
       }
-      
+
       // Close any remaining connections
       this.closeConnections();
-      
+
       console.log('Shutdown complete');
       process.exit(0);
     } catch (error) {
@@ -500,12 +511,12 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('\n❌ UNHANDLED REJECTION!');
   console.error('Reason:', reason);
   console.error('Promise:', promise);
-  
+
   // Log stack trace if available
   if (reason instanceof Error) {
     console.error('Stack:', reason.stack);
   }
-  
+
   // Never shut down, just log the error
   console.log('⚠️  Server kept alive despite unhandled rejection');
 });
@@ -515,10 +526,10 @@ process.on('uncaughtException', (error) => {
   console.error('\n❌ UNCAUGHT EXCEPTION!');
   console.error('Error:', error);
   console.error('Stack:', error.stack);
-  
+
   // Log to external service if needed
   // ...
-  
+
   // Keep the process alive
   console.log('⚠️  Server kept alive despite uncaught exception');
   return true; // Prevents default exit
@@ -548,7 +559,7 @@ const startServer = async () => {
     // Connect to MongoDB
     console.log('🔗 Connecting to MongoDB...');
     await connectDB();
-    
+
     // Start HTTP server
     console.log('🚀 Starting HTTP server...');
     const server = httpServer.listen(PORT, HOST, () => {
@@ -560,7 +571,7 @@ const startServer = async () => {
       console.log(`☁️  Cloudinary: ${cloudinary.config().cloud_name ? 'connected' : 'not configured'}`);
       console.log(`📅 ${new Date().toLocaleString()}`);
       console.log('='.repeat(50) + '\n');
-      
+
       // Emit ready event for process managers
       if (process.send) {
         process.send('ready');
@@ -574,10 +585,10 @@ const startServer = async () => {
     process.on('unhandledRejection', (err) => {
       console.error('UNHANDLED REJECTION!', err.name, err.message);
       console.error(err.stack);
-      
+
       // Log the error but don't shut down
       console.log('⚠️  Server kept alive despite unhandled rejection');
-      
+
       // Try to recover the error state
       if (err.name === 'MongoServerSelectionError' || err.name === 'MongooseServerSelectionError') {
         console.log('Attempting to reconnect to MongoDB...');
@@ -589,16 +600,16 @@ const startServer = async () => {
     process.on('uncaughtException', (err) => {
       console.error('UNCAUGHT EXCEPTION!', err.name, err.message);
       console.error(err.stack);
-      
+
       // Log the error but don't shut down
       console.log('⚠️  Server kept alive despite uncaught exception');
-      
+
       // Try to recover from common errors
       if (err.code === 'EADDRINUSE') {
         console.log('Port is in use, trying to recover...');
         // Add port recovery logic if needed
       }
-      
+
       return true; // Prevents default exit
     });
 
@@ -618,10 +629,10 @@ const startServer = async () => {
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     console.error(error.stack);
-    
+
     // Attempt to close any open connections
     closeConnections();
-    
+
     // Exit with error code
     process.exit(1);
   }
@@ -630,7 +641,7 @@ const startServer = async () => {
 // Only start the server if this file is run directly (not required/imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
   console.log('🚀 Starting server...');
-  
+
   // Handle process messages (used by PM2 and other process managers)
   process.on('message', (msg) => {
     if (msg === 'shutdown') {
@@ -638,30 +649,30 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       gracefulShutdown();
     }
   });
-  
+
   // Handle uncaught exceptions
   process.on('uncaughtException', (error) => {
     console.error('\n❌ UNCAUGHT EXCEPTION! Shutting down...');
     console.error('Error:', error);
     console.error('Stack:', error.stack);
-    
+
     // Attempt to gracefully shut down
     gracefulShutdown();
   });
-  
+
   // Handle unhandled rejections
   process.on('unhandledRejection', (reason, promise) => {
     console.error('\n❌ UNHANDLED REJECTION!');
     console.error('Reason:', reason);
     console.error('Promise:', promise);
-    
+
     // In production, we might want to shut down, but in development,
     // we can keep the server running for debugging
     if (process.env.NODE_ENV === 'production') {
       gracefulShutdown();
     }
   });
-  
+
   // Handle process termination signals
   ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
     process.on(signal, () => {
@@ -669,7 +680,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       gracefulShutdown();
     });
   });
-  
+
   // Start the server
   startServer().catch(error => {
     console.error('❌ Failed to start server:', error);

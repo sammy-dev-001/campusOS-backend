@@ -51,6 +51,23 @@ const userSchemaDefinition = {
     minlength: [2, 'Full name must be at least 2 characters'],
     maxlength: [100, 'Full name cannot exceed 100 characters']
   },
+  university: {
+    type: String,
+    trim: true,
+    maxlength: [150, 'University name cannot exceed 150 characters'],
+    default: ''
+  },
+  level: {
+    type: String,
+    enum: ['', '100 Level', '200 Level', '300 Level', '400 Level', '500 Level', 'Graduate/Masters', 'PhD'],
+    default: ''
+  },
+  course: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Course name cannot exceed 100 characters'],
+    default: ''
+  },
   pushToken: {
     type: String,
     default: null,
@@ -198,34 +215,34 @@ const userSchema = new mongoose.Schema(userSchemaDefinition, {
 // Indexes are automatically created for fields with unique: true
 
 // Pre-save hook to set fullName and handle timestamps
-userSchema.pre('save', function(next) {
+userSchema.pre('save', function (next) {
   // Set fullName if first or last name exists
   if ((this.isModified('firstName') || this.isModified('lastName')) && (this.firstName || this.lastName)) {
     this.fullName = `${this.firstName || ''} ${this.lastName || ''}`.trim();
   }
-  
+
   // Update timestamps
   const now = new Date();
   if (!this.createdAt) {
     this.createdAt = now;
   }
   this.updatedAt = now;
-  
+
   // Update passwordChangedAt if password was modified
   if (this.isModified('password') && !this.isNew) {
     this.passwordChangedAt = now;
   }
-  
+
   next();
 });
 
 // Method to check if user has a specific role
-userSchema.methods.hasRole = function(role) {
+userSchema.methods.hasRole = function (role) {
   return this.role === role || this.role === 'admin';
 };
 
 // Method to create password reset token
-userSchema.methods.createPasswordResetToken = function() {
+userSchema.methods.createPasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString('hex');
   this.passwordResetToken = crypto
     .createHash('sha256')
@@ -236,7 +253,7 @@ userSchema.methods.createPasswordResetToken = function() {
 };
 
 // Method to create email verification token
-userSchema.methods.createEmailVerificationToken = function() {
+userSchema.methods.createEmailVerificationToken = function () {
   const verificationToken = crypto.randomBytes(32).toString('hex');
   this.emailVerificationToken = crypto
     .createHash('sha256')
@@ -247,20 +264,20 @@ userSchema.methods.createEmailVerificationToken = function() {
 };
 
 // Method to compare password (works both as instance and static method)
-userSchema.methods.comparePassword = async function(candidatePassword, userPassword) {
+userSchema.methods.comparePassword = async function (candidatePassword, userPassword) {
   return await bcrypt.compare(candidatePassword, userPassword || this.password);
 };
 
 // Also add as static method for flexibility
-userSchema.statics.comparePassword = async function(candidatePassword, hashedPassword) {
+userSchema.statics.comparePassword = async function (candidatePassword, hashedPassword) {
   return await bcrypt.compare(candidatePassword, hashedPassword);
 };
 
 // Pre-save hook to hash password
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
   // Only run this function if password was actually modified
   if (!this.isModified('password')) return next();
-  
+
   try {
     // Skip hashing if the password is already hashed
     if (!this.password.startsWith('$2a$') && !this.password.startsWith('$2b$')) {
@@ -268,12 +285,12 @@ userSchema.pre('save', async function(next) {
       const salt = await bcrypt.genSalt(12);
       this.password = await bcrypt.hash(this.password, salt);
     }
-    
+
     // Set passwordChangedAt if not a new user
     if (!this.isNew) {
       this.passwordChangedAt = Date.now() - 1000; // 1 second in the past to ensure token is created after
     }
-    
+
     next();
   } catch (error) {
     next(error);
@@ -281,7 +298,7 @@ userSchema.pre('save', async function(next) {
 });
 
 // Method to check if user changed password after the token was issued
-userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
+userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
   if (this.passwordChangedAt) {
     const changedTimestamp = parseInt(
       this.passwordChangedAt.getTime() / 1000,

@@ -10,17 +10,21 @@ const registerUser = async (req, res) => {
   try {
     console.log('Received request body:', req.body);
     console.log('Request headers:', req.headers);
-    
-    const { username, email, password, displayName, fullName } = req.body;
-    
-    console.log('Parsed signup request:', { 
-      username, 
-      email, 
-      hasPassword: !!password, 
-      displayName, 
-      fullName 
+
+
+    const { username, email, password, displayName, fullName, university, level, course } = req.body;
+
+    console.log('Parsed signup request:', {
+      username,
+      email,
+      hasPassword: !!password,
+      displayName,
+      fullName,
+      university,
+      level,
+      course
     });
-    
+
     // Validate required fields
     if (!username || !email || !password || !displayName || !fullName) {
       const missingFields = [];
@@ -29,22 +33,22 @@ const registerUser = async (req, res) => {
       if (!password) missingFields.push('password');
       if (!displayName) missingFields.push('displayName');
       if (!fullName) missingFields.push('fullName');
-      
+
       console.error('Missing required fields:', missingFields);
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'All fields are required',
-        missingFields 
+        missingFields
       });
     }
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
-      console.log('User already exists:', { 
-        email: existingUser.email === email ? email : null, 
-        username: existingUser.username === username ? username : null 
+      console.log('User already exists:', {
+        email: existingUser.email === email ? email : null,
+        username: existingUser.username === username ? username : null
       });
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'User already exists',
         field: existingUser.email === email ? 'email' : 'username'
       });
@@ -58,7 +62,10 @@ const registerUser = async (req, res) => {
         email,
         password, // Let the pre-save hook handle hashing
         displayName: displayName || username,
-        fullName: fullName || displayName || username
+        fullName: fullName || displayName || username,
+        university: university || '',
+        level: level || '',
+        course: course || ''
       });
 
       await user.save();
@@ -67,9 +74,9 @@ const registerUser = async (req, res) => {
       console.error('Error creating user:', error);
       if (error.name === 'ValidationError') {
         const errors = Object.values(error.errors).map(err => err.message);
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: 'Validation failed',
-          errors 
+          errors
         });
       }
       throw error;
@@ -86,9 +93,9 @@ const registerUser = async (req, res) => {
       console.log('JWT token generated for user:', user._id);
     } catch (error) {
       console.error('Error generating JWT token:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         message: 'Error generating authentication token',
-        error: error.message 
+        error: error.message
       });
     }
 
@@ -99,7 +106,10 @@ const registerUser = async (req, res) => {
       email: user.email,
       displayName: user.displayName,
       fullName: user.fullName,
-      profilePic: user.profilePic
+      profilePic: user.profilePic,
+      university: user.university,
+      level: user.level,
+      course: user.course
     };
 
     console.log('Registration successful:', userResponse);
@@ -114,7 +124,7 @@ const registerUser = async (req, res) => {
       stack: error.stack,
       name: error.name
     });
-    
+
     // Handle duplicate key errors
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
@@ -124,9 +134,9 @@ const registerUser = async (req, res) => {
         value: error.keyValue[field]
       });
     }
-    
-    res.status(500).json({ 
-      message: 'Error registering user', 
+
+    res.status(500).json({
+      message: 'Error registering user',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
@@ -162,7 +172,7 @@ router.get('/routes', (req, res) => {
       });
     }
   });
-  
+
   res.json({
     status: 'success',
     results: routes.length,
@@ -189,7 +199,7 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       console.log('No user found with email:', email);
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'No account found with this email address',
         errorType: 'email'
       });
@@ -199,7 +209,7 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       console.log('Password mismatch for user:', email);
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Incorrect password',
         errorType: 'password'
       });
@@ -237,7 +247,7 @@ router.get('/me', async (req, res) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select('-password');
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
