@@ -40,6 +40,7 @@ import studyBuddyRoutes from './routes/studyBuddyRoutes.js';
 import timetableRoutes from './routes/timetableRoutes.js';
 import tutorRoutes from './routes/tutorRoutes.js';
 import userRoutes from './routes/users.js';
+import sessionRoutes from './routes/sessionRoutes.js';
 
 // Get the current file and directory names
 const __filename = fileURLToPath(import.meta.url);
