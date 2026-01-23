@@ -26,13 +26,16 @@ const registerUser = async (req, res) => {
     });
 
     // Validate required fields
-    if (!username || !email || !password || !displayName || !fullName) {
+    if (!username || !email || !password || !displayName || !fullName || !university || !level || !course) {
       const missingFields = [];
       if (!username) missingFields.push('username');
       if (!email) missingFields.push('email');
       if (!password) missingFields.push('password');
       if (!displayName) missingFields.push('displayName');
       if (!fullName) missingFields.push('fullName');
+      if (!university) missingFields.push('university');
+      if (!level) missingFields.push('level');
+      if (!course) missingFields.push('course');
 
       console.error('Missing required fields:', missingFields);
       return res.status(400).json({
@@ -227,6 +230,8 @@ router.post('/login', async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        displayName: user.displayName,
+        fullName: user.fullName,
         profilePic: user.profilePic,
       },
       token,
@@ -256,6 +261,84 @@ router.get('/me', async (req, res) => {
   } catch (error) {
     console.error('Auth error:', error);
     res.status(401).json({ message: 'Invalid token' });
+  }
+});
+
+// Forgot Password - Request reset
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      // For security, don't reveal if email exists or not
+      return res.json({
+        message: 'If an account exists with this email, you will receive password reset instructions.'
+      });
+    }
+
+    // Generate a 6-digit reset code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Save reset code to user
+    user.resetPasswordCode = resetCode;
+    user.resetPasswordExpiry = resetExpiry;
+    await user.save();
+
+    // In production, send email with nodemailer here
+    // For now, log the code (remove in production!)
+    console.log(`Password reset code for ${email}: ${resetCode}`);
+
+    res.json({
+      message: 'If an account exists with this email, you will receive password reset instructions.',
+      // Remove this in production - only for testing
+      debug_code: process.env.NODE_ENV === 'development' ? resetCode : undefined
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Error processing request' });
+  }
+});
+
+// Reset Password - Verify code and set new password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: 'Email, reset code, and new password are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      resetPasswordCode: code,
+      resetPasswordExpiry: { $gt: new Date() }
+    }).select('+password +resetPasswordCode +resetPasswordExpiry');
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired reset code' });
+    }
+
+    // Update password (the pre-save hook will hash it)
+    user.password = newPassword;
+    user.resetPasswordCode = undefined;
+    user.resetPasswordExpiry = undefined;
+    await user.save();
+
+    res.json({ message: 'Password reset successful. You can now log in with your new password.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Error resetting password' });
   }
 });
 

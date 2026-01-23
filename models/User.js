@@ -54,23 +54,31 @@ const userSchemaDefinition = {
   university: {
     type: String,
     trim: true,
-    maxlength: [150, 'University name cannot exceed 150 characters'],
-    default: ''
+    required: [true, 'University is required'],
+    maxlength: [150, 'University name cannot exceed 150 characters']
   },
   level: {
     type: String,
-    enum: ['', '100 Level', '200 Level', '300 Level', '400 Level', '500 Level', 'Graduate/Masters', 'PhD'],
-    default: ''
+    required: [true, 'Academic level is required'],
+    enum: ['100 Level', '200 Level', '300 Level', '400 Level', '500 Level', '600 Level', '700 Level', 'Graduate/Masters', 'PhD']
   },
   course: {
     type: String,
     trim: true,
-    maxlength: [100, 'Course name cannot exceed 100 characters'],
-    default: ''
+    required: [true, 'Course/Major is required'],
+    maxlength: [100, 'Course name cannot exceed 100 characters']
   },
   pushToken: {
     type: String,
     default: null,
+    select: false
+  },
+  resetPasswordCode: {
+    type: String,
+    select: false
+  },
+  resetPasswordExpiry: {
+    type: Date,
     select: false
   },
   // ... (rest of the schema fields remain the same)

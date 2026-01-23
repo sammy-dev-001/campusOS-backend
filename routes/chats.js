@@ -9,21 +9,21 @@ const router = express.Router();
 router.post('/', auth, async (req, res) => {
   try {
     const { participants: participantsInput, isGroupChat, name, groupImage } = req.body;
-    
+
     // Validate participants
     if (!Array.isArray(participantsInput)) {
       return res.status(400).json({ message: 'Participants must be an array' });
     }
-    
+
     // Filter out any invalid participant IDs
-    const participants = participantsInput.filter(id => 
+    const participants = participantsInput.filter(id =>
       id && (typeof id === 'string' || typeof id === 'object' && id !== null)
     );
-    
+
     if (participants.length === 0) {
       return res.status(400).json({ message: 'At least one valid participant is required' });
     }
-    
+
     // For one-on-one chat, check if chat already exists
     if (!isGroupChat && participants.length === 1) {
       // For one-on-one chats, find a chat that contains both users in the participants.user subdocument
@@ -33,8 +33,8 @@ router.post('/', auth, async (req, res) => {
           { 'participants.user': req.user.id },
           { 'participants.user': participants[0] }
         ]
-      }).populate('participants.user', 'username profilePic');
-      
+      }).populate('participants.user', 'username profilePic displayName fullName');
+
       if (existingChat) {
         return res.json(existingChat);
       }
@@ -64,11 +64,11 @@ router.post('/', auth, async (req, res) => {
       groupAdmin: isGroupChat ? req.user.id : null
     });
 
-  await chat.save();
-    
-  // Populate participants before sending response (populate the nested user field)
-  await chat.populate('participants.user', 'username profilePic');
-    
+    await chat.save();
+
+    // Populate participants before sending response (populate the nested user field)
+    await chat.populate('participants.user', 'username profilePic displayName fullName');
+
     res.status(201).json(chat);
   } catch (error) {
     console.error('Error creating chat:', error);
@@ -80,7 +80,7 @@ router.post('/', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const userId = req.query.userId || req.user?.id;
-    
+
     if (!userId) {
       console.error('No user ID provided');
       return res.status(400).json({ message: 'User ID is required' });
@@ -91,24 +91,24 @@ router.get('/', auth, async (req, res) => {
       console.error('Invalid user ID format:', userId);
       return res.status(400).json({ message: 'Invalid user ID format' });
     }
-    
+
     console.log('Fetching chats for user ID:', userId);
-    
+
     // Find chats where the user is a participant
     const chats = await Chat.find({
       'participants.user': new mongoose.Types.ObjectId(userId)
     })
-      .populate('participants.user', 'username profilePic')
+      .populate('participants.user', 'username profilePic displayName fullName')
       .populate('lastMessage')
       .sort({ updatedAt: -1 });
-      
+
     console.log(`Found ${chats.length} chats for user ${userId}`);
     res.json(chats || []);
   } catch (error) {
     console.error('Error fetching chats:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Error fetching chats',
-      error: error.message 
+      error: error.message
     });
   }
 });
@@ -118,62 +118,62 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const chatId = req.params.id;
     const userId = req.user.id;
-    
+
     // Validate chat ID format
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         status: 'fail',
-        message: 'Invalid chat ID format' 
+        message: 'Invalid chat ID format'
       });
     }
-    
+
     // Convert user ID to ObjectId
     const userIdObj = new mongoose.Types.ObjectId(userId);
-    
+
     // Find chat by ID and check if user is a participant
     const chat = await Chat.findOne({
       _id: new mongoose.Types.ObjectId(chatId),
       'participants.user': userIdObj
     })
-    .populate({
-      path: 'participants.user',
-      select: 'username profilePic'
-    })
-    .populate({
-      path: 'lastMessage',
-      populate: {
-        path: 'senderId',
-        select: 'username profilePic'
-      }
-    })
-    .lean();
-    
+      .populate({
+        path: 'participants.user',
+        select: 'username profilePic displayName fullName'
+      })
+      .populate({
+        path: 'lastMessage',
+        populate: {
+          path: 'senderId',
+          select: 'username profilePic displayName fullName'
+        }
+      })
+      .lean();
+
     if (!chat) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         status: 'fail',
-        message: 'Chat not found or you do not have permission to view this chat' 
+        message: 'Chat not found or you do not have permission to view this chat'
       });
     }
-    
+
     // Get messages separately
     const Message = mongoose.model('Message');
     const messages = await Message.find({ chatId: chat._id })
       .sort({ createdAt: -1 })
       .limit(50)
-      .populate('senderId', 'username profilePic')
+      .populate('senderId', 'username profilePic displayName fullName')
       .lean();
-    
+
     // Convert to plain object and add virtuals
     const chatObj = {
       ...chat,
       id: chat._id.toString(),
       messages: messages.reverse() // Reverse to show oldest first
     };
-    
+
     res.json(chatObj);
   } catch (error) {
     console.error('Error fetching chat:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       status: 'error',
       message: 'Error fetching chat',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -191,7 +191,7 @@ router.post('/:id/messages', auth, async (req, res) => {
       body: req.body,
       user: { id: req.user?.id, username: req.user?.username }
     });
-    
+
     const chat = await Chat.findOne({
       _id: req.params.id,
       // participants is an array of subdocuments { user: ObjectId, ... }
@@ -200,11 +200,11 @@ router.post('/:id/messages', auth, async (req, res) => {
     }).lean();
 
     console.log('[POST /:id/messages] Resolved chat (lean):', chat ? { id: chat._id, participants: chat.participants } : null);
-    
+
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' });
     }
-    
+
     const message = {
       content,
       sender: req.user.id,
@@ -213,7 +213,7 @@ router.post('/:id/messages', auth, async (req, res) => {
     };
 
     console.log('[POST /:id/messages] Constructed message object (pre-save):', message);
-    
+
     // Create a Message document (we do not store messages as an array on Chat)
     const Message = mongoose.model('Message');
 
@@ -232,7 +232,7 @@ router.post('/:id/messages', auth, async (req, res) => {
     await Chat.findByIdAndUpdate(req.params.id, { lastMessage: messageDoc._id, updatedAt: new Date() });
 
     // Populate sender info for the response
-    const populated = await Message.findById(messageDoc._id).populate('senderId', 'username profilePic').lean();
+    const populated = await Message.findById(messageDoc._id).populate('senderId', 'username profilePic displayName fullName').lean();
 
     const populatedMessage = {
       id: populated._id.toString(),
@@ -306,22 +306,22 @@ router.post('/:id/read', auth, async (req, res) => {
 router.put('/:id/group', auth, async (req, res) => {
   try {
     const { name, groupImage } = req.body;
-    
+
     const chat = await Chat.findOne({
       _id: req.params.id,
       isGroupChat: true,
       groupAdmin: req.user.id
     });
-    
+
     if (!chat) {
       return res.status(404).json({ message: 'Group chat not found or not authorized' });
     }
-    
+
     if (name) chat.name = name;
     if (groupImage) chat.groupImage = groupImage;
-    
+
     await chat.save();
-    
+
     res.json(chat);
   } catch (error) {
     console.error('Error updating group:', error);
@@ -333,17 +333,17 @@ router.put('/:id/group', auth, async (req, res) => {
 router.post('/:id/participants', auth, async (req, res) => {
   try {
     const { userId, action = 'add' } = req.body;
-    
+
     const chat = await Chat.findOne({
       _id: req.params.id,
       isGroupChat: true,
       groupAdmin: req.user.id
     });
-    
+
     if (!chat) {
       return res.status(404).json({ message: 'Group chat not found or not authorized' });
     }
-    
+
     if (action === 'add') {
       // Check if user is already a participant (compare nested .user field)
       if (chat.participants.some(p => String(p.user) === String(userId))) {
@@ -366,12 +366,12 @@ router.post('/:id/participants', auth, async (req, res) => {
         participant => String(participant.user) !== String(userId)
       );
     }
-    
+
     await chat.save();
-    
-  // Populate participants before sending response (populate the nested user field)
-  await chat.populate('participants.user', 'username profilePic');
-    
+
+    // Populate participants before sending response (populate the nested user field)
+    await chat.populate('participants.user', 'username profilePic displayName fullName');
+
     res.json(chat);
   } catch (error) {
     console.error('Error updating participants:', error);
