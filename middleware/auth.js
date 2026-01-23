@@ -15,10 +15,10 @@ export const auth = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     // Get user from the token
     const user = await User.findById(decoded.id).select('-password');
-    
+
     if (!user) {
       return res.status(401).json({ message: 'User not found' });
     }
@@ -38,15 +38,17 @@ export const auth = async (req, res, next) => {
   }
 };
 
+export const protect = auth;
+
 // Middleware to check if user is admin
 export const admin = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user.isAdmin) {
       return res.status(403).json({ message: 'Not authorized as admin' });
     }
-    
+
     next();
   } catch (error) {
     console.error('Admin middleware error:', error);
@@ -61,14 +63,14 @@ export const restrictTo = (...allowedRoles) => {
     if (req.user.role === 'admin') {
       return next();
     }
-    
+
     // Check if user's role is in the allowed roles
     if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: 'You do not have permission to perform this action' 
+      return res.status(403).json({
+        message: 'You do not have permission to perform this action'
       });
     }
-    
+
     next();
   };
 };
