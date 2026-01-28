@@ -88,6 +88,7 @@
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^6.9.9",
+    "pdf-parse": "^2.4.5",
     "redis": "^4.6.13",
     "sharp": "^0.33.1",
     "socket.io": "^4.7.4",

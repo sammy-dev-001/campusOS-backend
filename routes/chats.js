@@ -181,6 +181,55 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// Delete a chat (leave the conversation)
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const chatId = req.params.id;
+    const userId = req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID' });
+    }
+
+    // Find the chat and ensure user is a participant
+    const chat = await Chat.findOne({
+      _id: chatId,
+      'participants.user': userId
+    });
+
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    // Remove user from participants
+    chat.participants = chat.participants.filter(
+      p => String(p.user) !== String(userId)
+    );
+
+    // If no participants left, delete the chat and its messages
+    if (chat.participants.length === 0) {
+      await Chat.findByIdAndDelete(chatId);
+      const Message = mongoose.model('Message');
+      await Message.deleteMany({ chatId: chatId });
+      return res.json({ message: 'Chat deleted permanently' });
+    }
+
+    // If it's a group chat and the admin left, assign new admin
+    if (chat.isGroupChat && String(chat.groupAdmin) === String(userId)) {
+      if (chat.participants.length > 0) {
+        chat.groupAdmin = chat.participants[0].user;
+      }
+    }
+
+    await chat.save();
+    res.json({ message: 'Chat deleted' });
+
+  } catch (error) {
+    console.error('Error deleting chat:', error);
+    res.status(500).json({ message: 'Error deleting chat' });
+  }
+});
+
 // Add message to chat
 router.post('/:id/messages', auth, async (req, res) => {
   try {

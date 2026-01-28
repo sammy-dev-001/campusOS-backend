@@ -1,6 +1,7 @@
 import express from 'express';
 import { auth } from '../middleware/auth.js';
 import Post from '../models/Post.js';
+import Comment from '../models/Comment.js';
 
 const router = express.Router();
 
@@ -45,22 +46,22 @@ const createPost = async (req, content, mediaFile = null) => {
   if (mediaFile) {
     // Get the Cloudinary URL from the uploaded file
     const cloudinaryUrl = mediaFile.path || mediaFile.location || mediaFile.secure_url;
-    
+
     // Ensure we have a valid URL
     if (!cloudinaryUrl) {
       console.error('No valid URL found in mediaFile:', mediaFile);
       throw new Error('Failed to get media URL');
     }
-    
+
     // Extract filename without extension for publicId
     const filename = mediaFile.originalname || mediaFile.filename || '';
     const publicId = filename.split('.')[0] || `post_${Date.now()}`;
-    
+
     let mediaObject = {
       url: cloudinaryUrl,
-      mediaType: mediaFile.mimetype.startsWith('image/') ? 'image' : 
-                mediaFile.mimetype.startsWith('video/') ? 'video' :
-                mediaFile.mimetype.startsWith('audio/') ? 'audio' : 'document',
+      mediaType: mediaFile.mimetype.startsWith('image/') ? 'image' :
+        mediaFile.mimetype.startsWith('video/') ? 'video' :
+          mediaFile.mimetype.startsWith('audio/') ? 'audio' : 'document',
       publicId: publicId,
       altText: 'User uploaded content',
       width: 0,
@@ -73,11 +74,11 @@ const createPost = async (req, content, mediaFile = null) => {
         const additionalData = JSON.parse(req.body.mediaData);
         // Preserve the cloudinary URL from the file upload
         const { url, ...rest } = additionalData;
-        mediaObject = { 
-          ...mediaObject, 
-          ...rest, 
+        mediaObject = {
+          ...mediaObject,
+          ...rest,
           // Always use the cloudinary URL from the file upload
-          url: mediaObject.url 
+          url: mediaObject.url
         };
       }
     } catch (e) {
@@ -100,13 +101,13 @@ router.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
-    
+
     const posts = await Post.find({})
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .populate('author', 'username profilePic');
-      
+
     console.log(`Found ${posts.length} posts`);
     res.json(posts);
   } catch (error) {
@@ -129,35 +130,35 @@ router.post('/', auth, async (req, res, next) => {
     try {
       console.log('Received JSON post request:', req.body);
       const { content } = req.body;
-      
+
       if (!content && !req.file) {
         return res.status(400).json({ message: 'Content or media is required' });
       }
-      
+
       const post = await createPost(req, content);
       return res.status(201).json(post);
-      
+
     } catch (error) {
       console.error('Error in JSON post handler:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         message: error.message || 'Error creating post',
-        error: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
-  
+
   // Otherwise, use the file upload middleware
   return getUploadMiddleware(req, res, async (err) => {
     if (err) {
       console.error('File upload error:', err);
       return res.status(400).json({ message: err.message || 'File upload failed' });
     }
-    
+
     try {
       console.log('Received form-data post request');
       console.log('Body:', req.body);
       console.log('File:', req.file);
-      
+
       const content = req.body.content || '';
       let mediaUrl = null;
 
@@ -165,15 +166,15 @@ router.post('/', auth, async (req, res, next) => {
       if (!content && !req.file) {
         return res.status(400).json({ message: 'Content or media is required' });
       }
-      
+
       const post = await createPost(req, content, req.file);
       return res.status(201).json(post);
-      
+
     } catch (error) {
       console.error('Error in form-data post handler:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         message: error.message || 'Error creating post',
-        error: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   });
@@ -191,7 +192,7 @@ router.get('/', auth, async (req, res) => {
       .exec();
 
     const count = await Post.countDocuments();
-    
+
     res.json({
       posts,
       totalPages: Math.ceil(count / limit),
@@ -215,11 +216,11 @@ router.get('/:id', auth, async (req, res) => {
           select: 'username profilePic'
         }
       });
-      
+
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    
+
     res.json(post);
   } catch (error) {
     console.error('Error fetching post:', error);
@@ -232,19 +233,19 @@ router.put('/:id', auth, async (req, res) => {
   try {
     const { content } = req.body;
     const post = await Post.findById(req.params.id);
-    
+
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    
+
     // Check if the user is the author
     if (post.author.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to update this post' });
     }
-    
+
     post.content = content || post.content;
     const updatedPost = await post.save();
-    
+
     res.json(updatedPost);
   } catch (error) {
     console.error('Error updating post:', error);
@@ -256,19 +257,19 @@ router.put('/:id', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    
+
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    
+
     // Check if the user is the author or an admin
     if (post.author.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized to delete this post' });
     }
-    
+
     // Delete the post
     await Post.findByIdAndDelete(req.params.id);
-    
+
     res.json({ message: 'Post removed successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);
@@ -280,11 +281,11 @@ router.delete('/:id', auth, async (req, res) => {
 router.post('/:id/like', auth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    
+
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    
+
     // Check if the post has already been liked
     if (post.likes.includes(req.user.id)) {
       // Unlike the post
@@ -293,7 +294,7 @@ router.post('/:id/like', auth, async (req, res) => {
       // Like the post
       post.likes.push(req.user.id);
     }
-    
+
     await post.save();
     res.json({ likes: post.likes });
   } catch (error) {
@@ -307,30 +308,30 @@ router.post('/:id/comments', auth, async (req, res) => {
   try {
     const { content } = req.body;
     const post = await Post.findById(req.params.id);
-    
+
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    
+
     // Create a new comment using the Comment model
     const comment = new Comment({
       content,
       author: req.user.id,
       post: post._id
     });
-    
+
     // Save the comment
     await comment.save();
-    
+
     // Add comment to post's comments array
     post.comments.push(comment._id);
     await post.save();
-    
+
     // Populate author info in the response
     const populatedComment = await Comment.findById(comment._id)
       .populate('author', 'username profilePic')
       .lean();
-    
+
     res.status(201).json(populatedComment);
   } catch (error) {
     console.error('Error adding comment:', error);

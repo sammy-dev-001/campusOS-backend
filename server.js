@@ -30,6 +30,7 @@ import './models/User.js';
 import aiRoutes from './routes/aiRoutes.js';
 import announcementRoutes from './routes/announcementRoutes.js';
 import authRoutes from './routes/auth.js';
+import chatPdfRoutes from './routes/chatPdfRoutes.js';
 import chatRoutes from './routes/chats.js';
 import documentRoutes from './routes/documentRoutes.js';
 import healthRoutes from './routes/health.js';
@@ -366,6 +367,7 @@ app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/study-buddy`, studyBuddyRoutes);
 app.use(`${API_PREFIX}/ai`, aiRoutes);
 app.use(`${API_PREFIX}/sessions`, sessionRoutes);
+app.use(`${API_PREFIX}/chat`, chatPdfRoutes);
 
 // Mount non-versioned API routes for backward compatibility
 app.use('/api/auth', authRoutes);
@@ -382,6 +384,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/study-buddy', studyBuddyRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/chat', chatPdfRoutes);
 
 // Legacy health check redirect
 app.get('/health', (req, res) => {
