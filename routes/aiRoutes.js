@@ -114,6 +114,30 @@ router.post('/chat', async (req, res, next) => {
 });
 
 /**
+ * @route   POST /api/v1/ai/eddy
+ * @desc    Chat with Eddy - EduFi's AI student companion
+ *          Proxies through backend so the Gemini key is never exposed to clients
+ */
+router.post('/eddy', async (req, res, next) => {
+    try {
+        const { message, history } = req.body;
+
+        if (!message || message.trim().length === 0) {
+            return next(new AppError('Please provide a message', 400));
+        }
+
+        const response = await aiService.eddyChat(message, history || []);
+
+        res.status(200).json({
+            status: 'success',
+            data: { response },
+        });
+    } catch (error) {
+        next(new AppError(error.message || 'Failed to get response from Eddy', 500));
+    }
+});
+
+/**
  * @route   GET /api/v1/ai/status
  * @desc    Check AI service status
  */
