@@ -29,6 +29,38 @@ class AIService {
         if (this.apiKey) {
             this.genAI = new GoogleGenerativeAI(this.apiKey);
         }
+        this.cachedModelName = null;
+    }
+
+    async getBestModel() {
+        if (this.cachedModelName) return this.cachedModelName;
+        try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`);
+            if (res.ok) {
+                const data = await res.json();
+                const availableModels = data.models
+                    .filter(m => m.supportedGenerationMethods.includes('generateContent'))
+                    .map(m => m.name.replace('models/', ''));
+                
+                const priority = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-pro'];
+                for (const p of priority) {
+                    if (availableModels.includes(p)) {
+                        this.cachedModelName = p;
+                        console.log(`[AI Discovery] Selected model: ${p}`);
+                        return p;
+                    }
+                }
+                
+                if (availableModels.length > 0) {
+                    this.cachedModelName = availableModels[0];
+                    console.log(`[AI Discovery] Selected fallback model: ${availableModels[0]}`);
+                    return availableModels[0];
+                }
+            }
+        } catch (e) {
+            console.error('[AI Discovery Error] Defaulting to gemini-2.0-flash');
+        }
+        return 'gemini-2.0-flash';
     }
 
     isAvailable() {
@@ -41,8 +73,9 @@ class AIService {
         }
 
         try {
+            const targetModel = await this.getBestModel();
             const model = this.genAI.getGenerativeModel({
-                model: 'gemini-1.5-flash',
+                model: targetModel,
                 generationConfig: {
                     temperature: options.temperature || 0.7,
                     maxOutputTokens: options.maxTokens || 2048,
@@ -59,7 +92,7 @@ class AIService {
 
     /**
      * Eddy chat - multi-turn conversation with full history support
-     * Uses gemini-1.5-flash for better performance
+     * Uses dynamically verified models for better performance
      * @param {string} message - latest user message
      * @param {Array} history - [{role: 'user'|'assistant', content: string}]
      */
@@ -69,8 +102,9 @@ class AIService {
         }
 
         try {
+            const targetModel = await this.getBestModel();
             const model = this.genAI.getGenerativeModel({
-                model: 'gemini-1.5-flash',
+                model: targetModel,
                 systemInstruction: EDDY_SYSTEM_PROMPT,
                 generationConfig: {
                     temperature: 0.7,
