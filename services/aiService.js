@@ -2,8 +2,7 @@
  * AI Service - Gemini Integration
  */
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent';
-const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const EDDY_SYSTEM_PROMPT = `You are Eddy, a friendly and knowledgeable AI student companion for Nigerian university students using the EduFi app.
 
@@ -27,10 +26,13 @@ Important: You handle ACADEMICS, FINANCE, and WELLNESS. Be helpful across all th
 class AIService {
     constructor() {
         this.apiKey = process.env.GEMINI_API_KEY;
+        if (this.apiKey) {
+            this.genAI = new GoogleGenerativeAI(this.apiKey);
+        }
     }
 
     isAvailable() {
-        return !!this.apiKey;
+        return !!this.apiKey && !!this.genAI;
     }
 
     async generateContent(prompt, options = {}) {
@@ -38,25 +40,21 @@ class AIService {
             throw new Error('AI service is not configured. Please set GEMINI_API_KEY.');
         }
 
-        const response = await fetch(`${GEMINI_API_URL}?key=${this.apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
+        try {
+            const model = this.genAI.getGenerativeModel({
+                model: 'gemini-1.5-flash',
                 generationConfig: {
                     temperature: options.temperature || 0.7,
                     maxOutputTokens: options.maxTokens || 2048,
-                },
-            }),
-        });
+                }
+            });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error?.message || 'AI request failed');
+            const result = await model.generateContent(prompt);
+            return result.response.text();
+        } catch (error) {
+            console.error('Gemini SDK Error:', error);
+            throw new Error(error.message || 'AI request failed');
         }
-
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
 
     /**
@@ -70,37 +68,31 @@ class AIService {
             throw new Error('AI service is not configured. Please set GEMINI_API_KEY.');
         }
 
-        // Build contents array: system primer + history + new message
-        const contents = [
-            { role: 'user', parts: [{ text: EDDY_SYSTEM_PROMPT }] },
-            { role: 'model', parts: [{ text: 'Understood! I am Eddy, ready to help with academic guidance, finance, and wellness.' }] },
-            ...history.slice(-20).map(m => ({
-                role: m.role === 'user' ? 'user' : 'model',
-                parts: [{ text: m.content }],
-            })),
-            { role: 'user', parts: [{ text: message }] },
-        ];
-
-        const response = await fetch(`${GEMINI_FLASH_URL}?key=${this.apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents,
+        try {
+            const model = this.genAI.getGenerativeModel({
+                model: 'gemini-1.5-flash',
+                systemInstruction: EDDY_SYSTEM_PROMPT,
                 generationConfig: {
                     temperature: 0.7,
                     maxOutputTokens: 500,
-                },
-            }),
-        });
+                }
+            });
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error?.message || 'Failed to get AI response');
+            const formattedHistory = history.map(m => ({
+                role: m.role === 'user' ? 'user' : 'model',
+                parts: [{ text: m.content }],
+            }));
+
+            const chat = model.startChat({
+                history: formattedHistory
+            });
+
+            const result = await chat.sendMessage(message);
+            return result.response.text();
+        } catch (error) {
+            console.error('Gemini Eddy Chat Error:', error);
+            throw new Error(error.message || 'Failed to get AI response');
         }
-
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text
-            || "I'm sorry, I couldn't process that. Please try again.";
     }
 
     parseJSON(response) {
