@@ -2,8 +2,8 @@
  * AI Service - Gemini Integration
  */
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent';
+const GEMINI_FLASH_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
 
 const EDDY_SYSTEM_PROMPT = `You are Eddy, a friendly and knowledgeable AI student companion for Nigerian university students using the EduFi app.
 
