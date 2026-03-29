@@ -17,7 +17,24 @@ const checkAI = (req, res, next) => {
     next();
 };
 
-// Protect all routes
+/**
+ * @route   GET /api/v1/ai/debug-key
+ * @desc    Temporarily check what key Render is actually using - UNPROTECTED
+ */
+router.get('/debug-key', (req, res) => {
+    const key = process.env.GEMINI_API_KEY || '';
+    if (!key) {
+        return res.status(200).json({ debug: 'No key is set at all in process.env' });
+    }
+    const safeKey = key.substring(0, 6) + '...' + key.substring(key.length - 4);
+    res.status(200).json({ 
+        debug: 'Key currently loaded by Render', 
+        keyPreview: safeKey, 
+        length: key.length 
+    });
+});
+
+// Protect all other routes
 router.use(protect);
 router.use(checkAI);
 
@@ -143,23 +160,6 @@ router.post('/eddy', async (req, res, next) => {
  */
 router.get('/status', (req, res) => {
     res.status(200).json({ status: 'success', message: 'AI service is available' });
-});
-
-/**
- * @route   GET /api/v1/ai/debug-key
- * @desc    Temporarily check what key Render is actually using
- */
-router.get('/debug-key', (req, res) => {
-    const key = process.env.GEMINI_API_KEY || '';
-    if (!key) {
-        return res.status(200).json({ debug: 'No key is set at all in process.env' });
-    }
-    const safeKey = key.substring(0, 6) + '...' + key.substring(key.length - 4);
-    res.status(200).json({ 
-        debug: 'Key currently loaded by Render', 
-        keyPreview: safeKey, 
-        length: key.length 
-    });
 });
 
 export default router;
