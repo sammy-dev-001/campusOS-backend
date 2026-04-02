@@ -25,7 +25,7 @@ Important: You handle ACADEMICS, FINANCE, and WELLNESS. Be helpful across all th
 
 class AIService {
     constructor() {
-        this.apiKey = process.env.GEMINI_API_KEY;
+        this.apiKey = process.env.GEMINI_API_KEY || process.env.EXPO_PUBLIC_GEMINI_API_KEY;
         if (this.apiKey) {
             this.genAI = new GoogleGenerativeAI(this.apiKey);
         }
@@ -56,11 +56,20 @@ class AIService {
                     console.log(`[AI Discovery] Selected fallback model: ${availableModels[0]}`);
                     return availableModels[0];
                 }
+            } else {
+                const errText = await res.text();
+                console.error(`[AI Discovery Error] Failed to fetch models. Status: ${res.status}. Response: ${errText}`);
+                if (res.status === 403 || errText.includes('leaked')) {
+                    throw new Error('GEMINI_API_KEY_LEAKED: The API key has been leaked or revoked. Please update the API key in .env and Render.');
+                }
             }
         } catch (e) {
-            console.error('[AI Discovery Error] Defaulting to gemini-2.0-flash');
+            console.error('[AI Discovery Error] Network or parse error:', e.message);
+            if (e.message.includes('GEMINI_API_KEY_LEAKED')) {
+                throw e; // Bubble up this specific critical error
+            }
         }
-        return 'gemini-2.0-flash';
+        return 'gemini-1.5-flash'; // Safer generic fallback
     }
 
     isAvailable() {
