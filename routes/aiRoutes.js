@@ -155,11 +155,27 @@ router.post('/eddy', async (req, res, next) => {
 });
 
 /**
- * @route   GET /api/v1/ai/status
- * @desc    Check AI service status
+ * @route   POST /api/v1/ai/categorize
+ * @desc    Categorize a transaction based on SMS text
+ *          Used for intelligent financial tracking
  */
-router.get('/status', (req, res) => {
-    res.status(200).json({ status: 'success', message: 'AI service is available' });
+router.post('/categorize', async (req, res, next) => {
+    try {
+        const { smsText, type, amount } = req.body;
+
+        if (!smsText) {
+            return next(new AppError('Please provide SMS text', 400));
+        }
+
+        const category = await aiService.categorizeTransaction(smsText, type || 'expense', amount || 0);
+
+        res.status(200).json({
+            status: 'success',
+            data: { category },
+        });
+    } catch (error) {
+        next(new AppError(error.message || 'Failed to categorize transaction', 500));
+    }
 });
 
 export default router;

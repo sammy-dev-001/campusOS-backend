@@ -42,11 +42,11 @@ class AIService {
                     .filter(m => m.supportedGenerationMethods.includes('generateContent'))
                     .map(m => m.name.replace('models/', ''));
                 
-                const priority = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-pro'];
+                const priority = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-pro'];
                 for (const p of priority) {
                     if (availableModels.includes(p)) {
                         this.cachedModelName = p;
-                        console.log(`[AI Discovery] Selected model: ${p}`);
+                        console.log(`[AI Discovery] Selected stable model: ${p}`);
                         return p;
                     }
                 }
@@ -170,6 +170,46 @@ class AIService {
         const ctx = history.slice(-10).map(h => `${h.role === 'user' ? 'Student' : 'Assistant'}: ${h.content}`).join('\n');
         const prompt = `You are Campus Buddy, a friendly AI academic assistant.\n\n${ctx ? `History:\n${ctx}\n\n` : ''}Student: ${message}\n\nAssistant:`;
         return await this.generateContent(prompt, { temperature: 0.7, maxTokens: 1000 });
+    }
+
+    /**
+     * Categorize a bank transaction SMS
+     */
+    async categorizeTransaction(smsText, type, amount) {
+        const categories = type === 'income'
+            ? ['Salary', 'Transfer', 'Other']
+            : ['Food', 'Transport', 'Data', 'Bills', 'Shopping', 'Health', 'Entertainment', 'Education', 'Other'];
+
+        const prompt = `You are a Nigerian bank transaction categorizer for the EduFi app. 
+Analyze this bank SMS and respond with ONLY the category name from the list below.
+
+SMS: "${smsText}"
+Transaction Type: ${type}
+Amount: ₦${amount.toLocaleString()}
+
+Valid categories: ${categories.join(', ')}
+
+Consider common Nigerian transaction patterns:
+- POS/ATM/Web purchases → Shopping
+- Data/Airtime/MTN/Glo/Airtel/9mobile → Data
+- Uber/Bolt/Transport/Bus/Taxi → Transport
+- DStv/GOtv/Netflix/Spotify/Cinema → Entertainment
+- NEPA/PHCN/Electricity/Rent/Utility → Bills
+- School fees/Tuition/University/Exam → Education
+- Pharmacy/Hospital/Clinic/Medical → Health
+- Restaurant/Eat/Food vendor/Chicken Republic/KFC → Food
+- Salary/Wages/Payment → Salary
+- Transfer from others/Credit Alert → Transfer
+
+Respond with ONLY the category name, nothing else:`;
+
+        try {
+            const response = await this.generateContent(prompt, { temperature: 0.2, maxTokens: 50 });
+            return response.trim();
+        } catch (error) {
+            console.error('[Categorization Error]', error);
+            throw error;
+        }
     }
 }
 
