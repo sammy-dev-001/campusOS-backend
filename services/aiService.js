@@ -32,43 +32,7 @@ class AIService {
     }
 
     async getBestModel() {
-        if (this.cachedModelName) return this.cachedModelName;
-        try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`);
-            if (res.ok) {
-                const data = await res.json();
-                const availableModels = data.models
-                    .filter(m => m.supportedGenerationMethods.includes('generateContent'))
-                    .map(m => m.name.replace('models/', ''));
-                
-                const priority = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-pro'];
-                for (const p of priority) {
-                    if (availableModels.includes(p)) {
-                        this.cachedModelName = p;
-                        console.log(`[AI Discovery] Selected stable model: ${p}`);
-                        return p;
-                    }
-                }
-                
-                if (availableModels.length > 0) {
-                    this.cachedModelName = availableModels[0];
-                    console.log(`[AI Discovery] Selected fallback model: ${availableModels[0]}`);
-                    return availableModels[0];
-                }
-            } else {
-                const errText = await res.text();
-                console.error(`[AI Discovery Error] Failed to fetch models. Status: ${res.status}. Response: ${errText}`);
-                if (res.status === 403 || errText.includes('leaked')) {
-                    throw new Error('GEMINI_API_KEY_LEAKED: The API key has been leaked or revoked. Please update the API key in .env and Render.');
-                }
-            }
-        } catch (e) {
-            console.error('[AI Discovery Error] Network or parse error:', e.message);
-            if (e.message.includes('GEMINI_API_KEY_LEAKED')) {
-                throw e; // Bubble up this specific critical error
-            }
-        }
-        return 'gemini-1.5-flash'; // Safer generic fallback
+        return 'gemini-1.5-flash';
     }
 
     isAvailable() {
