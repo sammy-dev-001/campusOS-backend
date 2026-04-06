@@ -1,7 +1,6 @@
 /**
  * AI Service - Gemini Integration
  */
-
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const EDDY_SYSTEM_PROMPT = `You are Eddy, a friendly and knowledgeable AI student companion for Nigerian university students using the EduFi app.
