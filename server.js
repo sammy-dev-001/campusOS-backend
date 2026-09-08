@@ -91,7 +91,7 @@ app.use(helmet());
 
 // Configure CORS
 const corsOptions = {
-  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : '*',
+  origin: true, // Reflects the request origin to allow Expo web (localhost) and credentials
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
